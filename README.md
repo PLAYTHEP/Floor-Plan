@@ -1,31 +1,51 @@
 
-# SheetOps — Floor Plan + Issues (Google Sheets + Apps Script)
+# SheetOps (Google Sheets + Apps Script + HTML)
 
-- **Frontend:** `index.html` (React UMD + Tailwind) — เปิดด้วยไฟล์เดียว
-- **Backend:** `apps-script/Code.gs` — วางใน Google Apps Script แล้ว Deploy (Web app)
+- Frontend: `index.html` (React UMD + Tailwind, single file)
+- Backend: `apps-script/Code.gs` (Web app JSON API), `apps-script/appsscript.json` (manifest)
 
-## Quick start
+## Deploy (Apps Script)
+1. สร้างโปรเจกต์ Google Apps Script
+2. วางโค้ดจาก `apps-script/Code.gs`
+3. Deploy → **Web app** → Execute as: **Me**, Who has access: **Anyone**
+4. นำ URL `/exec` ไปตั้งในหน้าเว็บ (มี default แล้ว) หรือ
+   ```js
+   localStorage.setItem('SHEETOPS_APPS_SCRIPT_URL', 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec'); location.reload();
+   ```
 
-1. เปิด Google Apps Script → สร้างโปรเจกต์ → วางโค้ดจาก `apps-script/Code.gs`
-2. Deploy → **Web app** → Who has access: **Anyone** → นำ URL `/exec` มาใช้
-3. เปิด `index.html` ในเบราว์เซอร์
-   - ตั้งค่า (ถ้าต้องการ) ผ่าน `localStorage`:
-     - `SHEETOPS_APPS_SCRIPT_URL` = `https://script.google.com/macros/s/.../exec`
+### จำเป็นต้องมีสิทธิ์
+- Spreadsheets, Drive และ External requests (ประกาศใน `appsscript.json` แล้ว)
 
-### Sheets Required
-- `User` — คอลัมน์ B=ID, C=Name, E=Type
-- `Plan` — มีคอลัมน์ Station/TaskId และ Assigned
-- `ปัญหา` — จะถูกสร้างหัวอัตโนมัติเป็น `เวลา, รหัส, พนักงาน, งานที่เกี่ยวข้อง, ข้อความ, รูป`
+## Sheets
+- `User`: B=ID, C=Name, E=Type
+- `Plan`: ต้องมีหัว Station/TaskId และ Assigned (ชื่อคอลัมน์ยืดหยุ่น: station/taskid, assigned/assignedto/พนักงาน/รหัส)
+- `ปัญหา`: จะสร้างหัวอัตโนมัติ: `เวลา, รหัส, พนักงาน, งานที่เกี่ยวข้อง, ข้อความ, รูป`
+- `KPI`: จะสร้างหัวอัตโนมัติ: ดูในโค้ด
 
-## API (Apps Script)
-
-- `list_sheets`, `create_sheet`, `delete_sheet`, `rename_sheet`
-- `append_row`, `update_row`, `delete_row`, `upsert_by_key`
-- `get_values`, `set_values`
-- Domain: `set_assignees`, `append_user`, `delete_user`
-- Issues: `create_issue_base64`, `list_issues`
-- AI: `ai_chat` (ต้องใส่ `OPENAI_API_KEY` ใน Script properties)
+## API ตัวอย่าง (curl)
+- รายการปัญหา:
+  ```bash
+  curl 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec?action=list_issues'
+  ```
+- เปิดเคสแบบ JSON base64 (ไม่แนบรูป):
+  ```bash
+  curl 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec?action=create_issue_base64&taskId=TEST123&message=ping'
+  ```
+- บันทึกมอบหมายแบบชุด:
+  ```bash
+  curl -X POST 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec' \
+    -H 'Content-Type: application/json' \
+    -d '{"action":"bulk_set_assignees","items":[{"taskId":"1101","employeeIds":["U001","U002"]}]}'
+  ```
+- เพิ่ม/อัปเดตพนักงาน (Upsert by ID):
+  ```bash
+  curl -X POST 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec' -H 'Content-Type: application/json' -d '{"action":"append_user","user":{"id":"U999","name":"Tester","type":"Picker"}}'
+  ```
+- KPI:
+  ```bash
+  curl -X POST 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec' -H 'Content-Type: application/json' -d '{"action":"create_kpi","record":{"User ID":"U001","Date":"2025-08-11","UserName":"Alice"}}'
+  curl 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec?action=list_kpi&userId=U001&date=2025-08-11'
+  ```
 
 ## Debug
-เปิดหน้าเว็บด้วย `?debug=1` เพื่อดู log ของคำขอ API ใน Console
-
+เปิดหน้าเว็บด้วย `?debug=1` เพื่อดู log ของทุก API call ใน Console
