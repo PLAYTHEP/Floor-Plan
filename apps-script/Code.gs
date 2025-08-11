@@ -1,22 +1,20 @@
 
-/************ SheetOps — Combined Apps Script ************
- * Features:
- * - Generic CRUD for any sheet (create/rename/delete sheet; list sheets)
- * - Append/Update/Delete rows by row index or upsert by key column name
- * - Get/Set values (A1 ranges)
- * - Plan helpers: set_assignees
- * - Users: append_user, delete_user
+/************ SheetOps — Combined Apps Script (Full) ************
+ * Includes:
+ * - CRUD: sheets + rows + values
+ * - Plan: set_assignees + bulk_set_assignees
+ * - Users: append_user (upsert), delete_user
  * - Issues: create (multipart + base64), list
- * - AI assistant via OpenAI (need OPENAI_API_KEY in Script Properties)
- * 
- * JSON API: doGet/doPost both supported. Returns {ok: true/false, ...}
- *********************************************************/
+ * - KPI: create_kpi, list_kpi
+ * - AI: ai_chat (via OpenAI; set OPENAI_API_KEY in Script Properties)
+ ***************************************************************/
 
 /************ CONFIG ************/
-const SHEET_ID   = '15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU'; // Spreadsheet ID
+const SHEET_ID   = '15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU';
 const SHEET_USER = 'User';
 const SHEET_PLAN = 'Plan';
 const SHEET_ISS  = 'ปัญหา';
+const SHEET_KPI  = 'KPI';
 const UPLOAD_FOLDER_NAME = 'SheetOps_Issues_Uploads';
 
 /************ UTIL ************/
@@ -24,7 +22,7 @@ function _ss() { return SpreadsheetApp.openById(SHEET_ID); }
 function _sh(name) { return _ss().getSheetByName(name) || _ss().insertSheet(name); }
 function _headers(sh){
   if (!sh.getLastColumn()) return [];
-  const h = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
+  const h = sh.getRange(1,1,1,Math.max(1, sh.getLastColumn())).getValues()[0];
   return h.map(x => String(x||'').trim());
 }
 function _colIndex(headers, names, fallback){
@@ -36,14 +34,17 @@ function _colIndex(headers, names, fallback){
   }
   return fallback || 1;
 }
-function _nowStr(){ return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"); }
+function _nowStr(){
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+}
 function _ensureUploadFolder(){
   const iter = DriveApp.getFoldersByName(UPLOAD_FOLDER_NAME);
   if (iter.hasNext()) return iter.next();
   return DriveApp.createFolder(UPLOAD_FOLDER_NAME);
 }
 function _json(obj){
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 /************ ENTRY ************/
@@ -76,21 +77,36 @@ function handle(p){
     if (a==='create_sheet')  return api_createSheet_(p);
     if (a==='delete_sheet')  return api_deleteSheet_(p);
     if (a==='rename_sheet')  return api_renameSheet_(p);
+
     // CRUD - rows
     if (a==='append_row')    return api_appendRow_(p);
     if (a==='update_row')    return api_updateRow_(p);
     if (a==='delete_row')    return api_deleteRow_(p);
     if (a==='upsert_by_key') return api_upsertByKey_(p);
+
     // Values
     if (a==='get_values')    return api_getValues_(p);
     if (a==='set_values')    return api_setValues_(p);
-    // Domain specific
-    if (a==='set_assignees')     return api_setAssignees_(p);
-    if (a==='append_user')       return api_appendUser_(p);
-    if (a==='delete_user')       return api_deleteUser_(p);
-    if (a==='create_issue_base64') return api_createIssueBase64_(p);
-    if (a==='list_issues')       return api_listIssues_(p);
-    if (a==='ai_chat')           return api_aiChat_(p);
+
+    // Plan
+    if (a==='set_assignees')        return api_setAssignees_(p);
+    if (a==='bulk_set_assignees')   return api_bulkSetAssignees_(p);
+
+    // Users
+    if (a==='append_user')          return api_appendUser_(p);
+    if (a==='delete_user')          return api_deleteUser_(p);
+
+    // Issues
+    if (a==='create_issue_base64')  return api_createIssueBase64_(p);
+    if (a==='list_issues')          return api_listIssues_(p);
+
+    // KPI
+    if (a==='create_kpi')           return api_createKPI_(p);
+    if (a==='list_kpi')             return api_listKPI_(p);
+
+    // AI
+    if (a==='ai_chat')              return api_aiChat_(p);
+
     return _json({ok:false, error:'Unknown action'});
   } catch (err) { return _json({ok:false, error:String(err)}); }
 }
@@ -215,7 +231,7 @@ function api_setValues_(p){
   return _json({ok:true});
 }
 
-/************ DOMAIN: PLAN ************/
+/************ PLAN ************/
 function api_setAssignees_(p){
   const taskId = String(p.taskId||'').trim();
   var employeeIds = p.employeeIds;
@@ -238,8 +254,39 @@ function api_setAssignees_(p){
   sh.appendRow(row);
   return _json({ok:true, created:true});
 }
+// Bulk save (from UI "บันทึก (n)")
+function api_bulkSetAssignees_(p){
+  var items = Array.isArray(p.items)? p.items : [];
+  var sh = _sh(SHEET_PLAN), H=_headers(sh);
+  var cTask     = _colIndex(H, ['taskid','task id','station','สแตชัน','สถานี','สเตชัน'], 1);
+  var cAssigned = _colIndex(H, ['assignedto','assigned','พนักงาน','รหัส','ผู้รับผิดชอบ'], 4);
 
-/************ DOMAIN: USERS ************/
+  // Index: taskId -> row number
+  var idx = {}, last = Math.max(2, sh.getLastRow());
+  if (last>=2){
+    var data = sh.getRange(2,1,last-1, sh.getLastColumn()).getValues();
+    for (var r=0;r<data.length;r++){
+      var tid = String(data[r][cTask-1]||'').trim();
+      if (tid) idx[tid] = r+2;
+    }
+  }
+  items.forEach(function(it){
+    var tid = String(it.taskId||'').trim();
+    var list = Array.isArray(it.employeeIds)? it.employeeIds : [];
+    if (!tid) return;
+    var row = idx[tid];
+    if (!row){
+      var newRow = []; newRow[cTask-1]=tid; newRow[cAssigned-1]=list.join(',');
+      sh.appendRow(newRow);
+      idx[tid] = sh.getLastRow();
+    } else {
+      sh.getRange(row, cAssigned).setValue(list.join(','));
+    }
+  });
+  return _json({ok:true, updated: items.length});
+}
+
+/************ USERS ************/
 function api_appendUser_(p){
   const u = p.user || {}, id=String(u.id||'').trim(), name=String(u.name||'').trim(), type=String(u.type||'').trim();
   if(!id || !name) throw new Error('id and name required');
@@ -247,8 +294,21 @@ function api_appendUser_(p){
   if (sh.getLastRow()===0) sh.appendRow(['ID','Name','(D)','Type','(F)']);
   const H=_headers(sh);
   const cB=_colIndex(H,['id','รหัส'],2), cC=_colIndex(H,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล'],3), cE=_colIndex(H,['type','ประเภท','ชนิด'],5);
-  var row=[]; row[cB-1]=id; row[cC-1]=name; row[cE-1]=type; sh.appendRow(row);
-  return _json({ok:true});
+
+  // Upsert by ID
+  var last = sh.getLastRow(); var updated = false;
+  for (var r=2;r<=last;r++){
+    var cur = String(sh.getRange(r, cB).getValue()).trim();
+    if (cur === id){
+      sh.getRange(r, cC).setValue(name);
+      if (cE) sh.getRange(r, cE).setValue(type);
+      updated = true; break;
+    }
+  }
+  if (!updated){
+    var row=[]; row[cB-1]=id; row[cC-1]=name; row[cE-1]=type; sh.appendRow(row);
+  }
+  return _json({ok:true, updated});
 }
 function api_deleteUser_(p){
   const id = String(p.employeeId||'').trim();
@@ -268,7 +328,7 @@ function api_deleteUser_(p){
   return _json({ok:true});
 }
 
-/************ DOMAIN: ISSUES ************/
+/************ ISSUES ************/
 function _userNameById_(id){
   if(!id) return '';
   try{
@@ -327,6 +387,35 @@ function api_listIssues_(_p){
     return { time:r[ixTime]||'', employeeId:empId, employeeName:name, taskId:r[ixTask]||'', message:r[ixMsg]||'', images:imgs };
   });
   return _json({ok:true, items});
+}
+
+/************ KPI ************/
+function _ensureKPIHeaders_(){
+  var sh = _sh(SHEET_KPI);
+  if (sh.getLastRow()===0){
+    sh.appendRow(['User ID','Date','UserName','KPI Target','Station','Floor','Shift','Function','Standard Hour','Productive Hour','Idle Time','Break Time','Total Hour','Total Unit','Total Tote','UPMH / TPMH','PERCENT']);
+  }
+  return sh;
+}
+function api_createKPI_(p){
+  var rec = p.record || {};
+  var sh = _ensureKPIHeaders_(), H=_headers(sh);
+  var arr = new Array(H.length).fill('');
+  H.forEach(function(h, i){ arr[i] = rec[h] !== undefined ? rec[h] : ''; });
+  sh.appendRow(arr);
+  return _json({ok:true});
+}
+function api_listKPI_(p){
+  var sh = _ensureKPIHeaders_(), H=_headers(sh);
+  var last = sh.getLastRow();
+  if (last<2) return _json({ok:true, items:[]});
+  var vals = sh.getRange(2,1,last-1, sh.getLastColumn()).getValues();
+  var items = vals.map(function(r){ var obj={}; H.forEach(function(h,i){ obj[h]=r[i]; }); return obj; });
+
+  var uid = String(p.userId||'').trim(); var date = String(p.date||'').trim();
+  if (uid) items = items.filter(function(x){ return String(x['User ID']||'').trim()===uid; });
+  if (date) items = items.filter(function(x){ return String(x['Date']||'').slice(0,10)===date; });
+  return _json({ok:true, items: items});
 }
 
 /************ AI CHAT ************/
