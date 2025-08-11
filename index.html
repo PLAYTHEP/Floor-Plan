@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <title>SheetOps — Floor Plan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      html,body,#root{height:100%}
+      .card{border:1px solid rgba(148,163,184,.25);border-radius:1rem;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .tile{border:1px solid rgba(148,163,184,.35);background:#fff;border-radius:.75rem;padding:14px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;justify-content:center;min-height:70px;transition:all .12s ease}
+      .tile:hover{box-shadow:0 2px 6px rgba(0,0,0,.06);transform:translateY(-1px)}
+      .tile.drop{outline:2px dashed #38bdf8; outline-offset:2px; background:rgba(56,189,248,.06)}
+      .tile.missing{background:linear-gradient(180deg,rgba(241,245,249,.7),rgba(255,255,255,1));}
+      .pill{display:inline-flex;align-items:center;gap:.35rem;padding:.15rem .5rem;border-radius:999px;font-size:11px;border:1px solid rgba(148,163,184,.35);background:#fff;white-space:nowrap}
+      .avatar{width:24px;height:24px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:.7rem;color:white}
+      .floor1{--c:#0284c7;--bg:linear-gradient(90deg,rgba(14,165,233,.06),rgba(14,165,233,0))}
+      .floor2{--c:#a16207;--bg:linear-gradient(90deg,rgba(234,179,8,.09),rgba(234,179,8,0))}
+      .floor3{--c:#4f46e5;--bg:linear-gradient(90deg,rgba(99,102,241,.08),rgba(99,102,241,0))}
+      .floorTitle{color:var(--c); font-weight:800}
+      .sectionHead{padding:.5rem 1rem;border-radius:.75rem;background:var(--bg);border:1px dashed color-mix(in srgb, var(--c) 40%, transparent)}
+      .tileTitle{font-weight:700}
+      .btn{padding:.45rem .8rem;border-radius:.7rem;border:1px solid rgba(148,163,184,.35);background:white}
+      .btnP{background:#0ea5e9;border-color:#0ea5e9;color:white}
+      .select{appearance:none;background:#fff url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2220%22 viewBox=%220 0 20 20%22 fill=%22none%22><path d=%22M5 7l5 6 5-6%22 stroke=%22%236b7280%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>') no-repeat right .6rem center/16px 16px;}
+      .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+      .fab{position:fixed; right:16px; bottom:16px; z-index:50}
+      .chatbox{position:fixed; right:16px; bottom:72px; width:360px; max-width:92vw; z-index:50}
+    </style>
+  </head>
+  <body class="bg-slate-50">
+    <div id="root"></div>
+<script>
+  try {
+    const k = 'SHEETOPS_APPS_SCRIPT_URL';
+    const def = 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec';
+    const cur = localStorage.getItem(k);
+    if (!cur || !cur.includes('/macros/s/')) localStorage.setItem(k, def);
+  } catch(e) {}
+</script>
+
+    <script>
+      // Force URL override to the latest Apps Script deployment
+      try{
+        const key='SHEETOPS_APPS_SCRIPT_URL';
+        const def='https://script.google.com/macros/s/AKfycbwvc4AxcUCFAyAevZsVzmQTAtiOU93qvgBFhJCEpK36rpewBFjacrJNxBzPbZGKeowdLA/exec';
+        const cur=localStorage.getItem(key);
+        if(!cur || !cur.includes('/macros/s/')) localStorage.setItem(key, def);
+      }catch(e){}
+    </script>
+    <div id="toasts" class="fixed top-3 right-3 space-y-2 z-[9999]"></div>
+
+    <script type="text/babel">
+      const {useState, useEffect, useMemo, useRef} = React;
+
+      const DBG = new URLSearchParams(location.search).get('debug')==='1';
+const DEFAULTS = {
+        SHEET_ID: '15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU',
+        API_KEY:  'AIzaSyDObfhk_-Rnz5UCzf3Kt_BSqbnK8QoZunk',
+        APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec'
+      };
+
+      const VIEW_ONLY = new URLSearchParams(location.search).get('mode') === 'view';
+      const STATIONS = {
+        'Floor 1': ['1101','1102','1103','1104','1105','1106','1107','1201','1203','1205'],
+        'Floor 2': ['2101','2102','2103','2104','2105','2201','2203','2205'],
+        'Floor 3': ['3101','3105','3201','3205']
+      };
+
+      function resolveConfig(){
+        const s = (k)=>localStorage.getItem(k)||'';
+        return {
+          SHEET_ID: s('SHEETOPS_SHEET_ID') || DEFAULTS.SHEET_ID,
+          API_KEY: s('SHEETOPS_API_KEY') || DEFAULTS.API_KEY,
+          APPS_SCRIPT_URL: s('SHEETOPS_APPS_SCRIPT_URL') || DEFAULTS.APPS_SCRIPT_URL,
+        };
+      }
+
+      function pushToast(msg, type='error'){
+        try{
+          const wrap = document.getElementById('toasts'); if(!wrap) return;
+          const node = document.createElement('div');
+          node.className = `px-3 py-2 rounded-xl text-sm shadow border ${type==='error'?'bg-rose-50 border-rose-200 text-rose-800':'bg-emerald-50 border-emerald-200 text-emerald-800'}`;
+          node.textContent = msg; wrap.appendChild(node);
+          setTimeout(()=>{ node.style.opacity='0'; node.style.transform='translateY(-6px)'; }, 3200);
+          setTimeout(()=>{ try{wrap.removeChild(node)}catch{} }, 3600);
+        }catch{}
+      }
+      window.addEventListener('error', (e)=>{ pushToast('Uncaught: ' + (e?.message||'Unknown error')); });
+      window.addEventListener('unhandledrejection', (e)=>{ pushToast('Async: ' + (e?.reason?.message||e?.reason||'Promise error')); });
+
+      const SHEET_USER='User', SHEET_PLAN='Plan', SHEET_ISSUE='ปัญหา';
+      const gsRange = (id, key, sheet, range) => `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(sheet+'!'+range)}?key=${key}`;
+      const guessHeaderIndex=(headers,names)=>{
+        const lower=headers.map(h=>String(h||'').trim().toLowerCase());
+        for(const n of names){ const i=lower.indexOf(n.toLowerCase()); if(i>-1) return i; } return -1;
+      };
+      const colorFor = key => { const colors=['#0ea5e9','#06b6d4','#14b8a6','#22c55e','#a3e635','#eab308','#f59e0b','#ef4444','#6366f1','#8b5cf6','#ec4899','#f43f5e']; let hash=0; for(let i=0;i<key.length;i++) hash=(hash*31+key.charCodeAt(i))>>>0; return colors[hash%colors.length]; };
+
+      function parseUsers(values){
+        if(!values?.length) return [];
+        const h=values[0], rows=values.slice(1);
+        const ixId=guessHeaderIndex(h,['id','รหัส']);
+        const ixName=guessHeaderIndex(h,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล']);
+        const ixRole=guessHeaderIndex(h,['role','หน้าที่']);
+        const ixType=guessHeaderIndex(h,['type','ประเภท','ชนิด']);
+        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>({
+          id:   String(ixId>=0?r[ixId]:r[0]||'').trim(),
+          name: String(ixName>=0?r[ixName]:r[1]||'').trim(),
+          role: String(ixRole>=0?r[ixRole]:'').trim()||undefined,
+          type: String(ixType>=0?r[ixType]:'').trim()||undefined,
+        })).filter(u=>u.id && u.name);
+      }
+      function parsePlan(values){
+        if(!values?.length) return [];
+        const h=values[0], rows=values.slice(1);
+        const ixStation=guessHeaderIndex(h,['taskid','task id','station','สแตชัน','สถานี','สเตชัน']);
+        const ixType=guessHeaderIndex(h,['type','ประเภท']);
+        const ixStatus=guessHeaderIndex(h,['status','สถานะ']);
+        const ixAssigned=guessHeaderIndex(h,['assignedto','assigned','พนักงาน','รหัส','ผู้รับผิดชอบ']);
+        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>{
+          const station=String(ixStation>=0?r[ixStation]:r[0]||'').trim();
+          const assignedRaw = String(ixAssigned>=0?r[ixAssigned]:'').trim();
+          const list = assignedRaw ? assignedRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+          return {
+            id: station || Math.random().toString(36).slice(2),
+            station,
+            type: String(ixType>=0?r[ixType]:'').trim()||undefined,
+            status:String(ixStatus>=0?r[ixStatus]:'').trim()||undefined,
+            assignedList: list,
+          };
+        });
+      }
+
+      async function fetchValues(cfg, sheet, range){ if(DBG) console.log('[fetchValues]', sheet, range);
+        try{
+          const r = await fetch(gsRange(cfg.SHEET_ID,cfg.API_KEY,sheet,range));
+          const t = await r.text(); let j=null; try{ j = JSON.parse(t); }catch{}
+          if(!r.ok) throw new Error('Sheets API '+r.status+': '+t.slice(0,120));
+          return j?.values || [];
+        }catch(e){
+          try{
+            const u = new URL(cfg.APPS_SCRIPT_URL);
+            u.searchParams.set('action','get_values');
+            u.searchParams.set('sheet',sheet);
+            u.searchParams.set('range',range);
+            const r2 = await fetch(u.toString());
+            const t2 = await r2.text(); let j2=null; try{ j2 = JSON.parse(t2); }catch{}
+            if(j2?.ok) return j2.values || [];
+          }catch(e2){}
+          pushToast('โหลดข้อมูลไม่สำเร็จ (Sheets/API)'); throw e;
+        }
+      }
+      async function postScript(cfg, payload){ if(DBG) console.log('[postScript]', payload);
+        try{ // JSON
+          const r = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          const text = await r.text(); let j=null; try{ j=JSON.parse(text); }catch{}
+          if(!r.ok) throw new Error('POST JSON '+r.status+': '+text.slice(0,120));
+          return j || {ok:true};
+        }catch(e1){
+          try{ // form
+            const form = new URLSearchParams({ payload: JSON.stringify(payload) });
+            const r2 = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: form.toString() });
+            const t2 = await r2.text(); let j2=null; try{ j2=JSON.parse(t2); }catch{}
+            if(!r2.ok) throw new Error('POST form '+r2.status+': '+t2.slice(0,120));
+            return j2 || {ok:true};
+          }catch(e2){
+            try{ // GET beacon
+              const u = new URL(cfg.APPS_SCRIPT_URL);
+              if (payload.action) u.searchParams.set('action', payload.action);
+              Object.keys(payload).forEach(k => { if (k==='action') return; const v=payload[k]; if (v===undefined||v===null) return; if (typeof v==='object') u.searchParams.set(k, JSON.stringify(v)); else u.searchParams.set(k, String(v)); });
+              await new Promise((resolve) => { const img = new Image(); img.onload=()=>resolve(true); img.onerror=()=>resolve(true); img.src=u.toString(); });
+              return { ok:true, via:'img-get' };
+            }catch(e3){ throw e1; }
+          }
+        }
+      }
+      async function postFormData(cfg, formData){
+        const r = await fetch(cfg.APPS_SCRIPT_URL, { method:'POST', body: formData });
+        const t = await r.text(); let j=null; try{ j = JSON.parse(t); }catch{}
+        if(!r.ok) throw new Error('POST multipart '+r.status+': '+t.slice(0,120));
+        return j || {ok:true};
+      }
+
+      function App(){
+        const [cfg] = useState(resolveConfig());
+        const [page,setPage] = useState('plan'); // 'plan' | 'issues'
+        const [users,setUsers] = useState([]);
+        const [tasks,setTasks] = useState([]);
+        const [issues,setIssues] = useState([]);
+        const [search,setSearch] = useState('');
+        const [typeFilter,setTypeFilter] = useState('All');
+        const [adding,setAdding] = useState(false);
+        const [newUser,setNewUser] = useState({id:'',name:'',type:''});
+        const [err,setErr] = useState(null);
+        const [loading,setLoading] = useState(false);
+        const [chatOpen, setChatOpen] = useState(false);
+        const chatInputRef = useRef(null);
+        const [chatMsgs, setChatMsgs] = useState([{role:'system', content:'คุณเป็นผู้ช่วยสำหรับงานคลัง/สแตชัน'}]);
+
+        const loadAll = async () => {
+          setLoading(true);
+          try{
+            const [u, p] = await Promise.all([
+              fetchValues(cfg, 'User', 'B1:F'),
+              fetchValues(cfg, 'Plan', 'A1:Z')
+            ]);
+            setUsers(parseUsers(u));
+            setTasks(parsePlan(p));
+            setErr(null);
+          }catch(e){ setErr('Failed to fetch'); }
+          finally{ setLoading(false); }
+        };
+        const loadIssues = async () => {
+          try{
+            const r = await postScript(cfg, {action:'list_issues'});
+            if (r && r.ok && Array.isArray(r.items)) setIssues(r.items);
+          }catch(e){ pushToast('โหลดปัญหาไม่สำเร็จ'); }
+        };
+        useEffect(()=>{ loadAll(); loadIssues(); }, [cfg.SHEET_ID, cfg.API_KEY]);
+
+        const userMap = useMemo(()=>Object.fromEntries(users.map(u=>[u.id,u])),[users]);
+        const taskByStation = useMemo(()=>{ const m = new Map(); tasks.forEach(t => m.set(String(t.station), t)); return m; }, [tasks]);
+
+        const sheetTypes = useMemo(()=>{
+          const raw = users.map(u=>String(u.type||'').trim()).filter(Boolean);
+          const map = new Map();
+          for (const t of raw) { const k=t.toLowerCase(); if(!map.has(k)) map.set(k,t); }
+          return Array.from(map.values()).sort((a,b)=>a.localeCompare(b,'th'));
+        }, [users]);
+        const filteredUsers = useMemo(()=>{ const q=search.toLowerCase(); return users.filter(u => (typeFilter==='All' || u.type===typeFilter) && (u.name+u.id).toLowerCase().includes(q)); }, [users, search, typeFilter]);
+
+        async function saveAssignees(station, list, status){
+          let ok=false;
+          try{ const r=await postScript(cfg,{ action:'set_assignees', taskId: station, employeeIds: list, status }); ok = !!(r && (r.ok!==false)); }catch{}
+          if(!ok){
+            try{ await postScript(cfg,{ action:'update_status', taskId: station, employeeId: list.join(','), status }); ok = true; }catch(e){ pushToast('บันทึกผู้รับผิดชอบไม่สำเร็จ: '+(e?.message||e)); }
+          }
+        }
+
+        const onDragStartEmp = (e, emp) => { e.dataTransfer.setData('text/plain', JSON.stringify(emp)); e.dataTransfer.effectAllowed = 'move'; };
+        const onDropTile = async (e, station) => {
+          e.preventDefault(); if(VIEW_ONLY) return alert('View-only mode');
+          let emp=null; try{ emp = JSON.parse(e.dataTransfer.getData('text/plain')||''); }catch{}
+          if(!emp?.id) return;
+          setTasks(ts => { const copy = ts.map(t => ({...t, assignedList:[...(t.assignedList||[])]}));
+            copy.forEach(t => { const idx = (t.assignedList||[]).indexOf(emp.id); if(idx>-1) t.assignedList.splice(idx,1); });
+            let tgt = copy.find(t => t.station===station); if(!tgt) { tgt={station, id:station, assignedList:[]}; copy.push(tgt); }
+            if(!tgt.assignedList.includes(emp.id)) tgt.assignedList.push(emp.id);
+            return copy; });
+          const target = taskByStation.get(station) || {assignedList:[]};
+          const newList = Array.from(new Set([...(target.assignedList||[]).filter(id=>id!==emp.id), emp.id]));
+          await saveAssignees(station, newList, 'assigned');
+          pushToast(`มอบหมาย ${emp.name} → ${station}`, 'ok');
+        };
+
+        function autoAssignOnePerStation(filterFloor=null){
+          if(VIEW_ONLY) return alert('View-only mode');
+          const empToStation = new Map();
+          tasks.forEach(t => (t.assignedList||[]).forEach(eid => { if(!empToStation.has(eid)) empToStation.set(eid, t.station); }));
+          const available = users
+            .filter(u => String(u.type||'').trim().toLowerCase() === 'picker')
+            .map(u => u.id)
+            .filter(id => !empToStation.has(id));
+
+        const need = [];
+          for(const [floor, arr] of Object.entries(STATIONS)){
+            if (filterFloor && floor !== filterFloor) continue;
+            arr.forEach(st => { const t = taskByStation.get(st); if(!t || !t.assignedList || t.assignedList.length===0) need.push(st); });
+          }
+          for(let i=available.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [available[i],available[j]]=[available[j],available[i]]; }
+
+          const ops = []; const newTasks = tasks.map(t => ({...t, assignedList:[...(t.assignedList||[])]}));
+          need.forEach((st, i) => { const id = available[i]; if(!id) return; newTasks.forEach(t => { const k=t.assignedList.indexOf(id); if(k>-1) t.assignedList.splice(k,1); }); let t = newTasks.find(x=>x.station===st); if(!t) { t={station:st,id:st,assignedList:[]}; newTasks.push(t); } t.assignedList.push(id); ops.push({st, list:[...t.assignedList]}); });
+          setTasks(newTasks);
+          Promise.all(ops.map(op => saveAssignees(op.st, op.list, 'assigned'))).then(()=>pushToast('สุ่มมอบหมาย (Picker) เสร็จสิ้น','ok')).catch(()=>pushToast('สุ่มมอบหมายบางส่วนไม่สำเร็จ'));
+        }
+
+        async function clearFloor(floor){
+          if(VIEW_ONLY) return alert('View-only mode');
+          const stations = STATIONS[floor] || [];
+          const newTasks = tasks.map(t => ({...t, assignedList: stations.includes(String(t.station)) ? [] : (t.assignedList||[]) }));
+          setTasks(newTasks);
+          try{ await Promise.all(stations.map(st => saveAssignees(st, [], undefined))); pushToast('ล้างคนออกจาก '+floor+' เรียบร้อย','ok'); }catch(e){ pushToast('ล้างไม่สำเร็จบางส่วน'); }
+        }
+        async function clearAll(){
+          await clearFloor('Floor 1'); await clearFloor('Floor 2'); await clearFloor('Floor 3');
+        }
+
+        async function addUser(){
+          if(VIEW_ONLY) return alert('View-only mode');
+          const {id,name,type} = newUser;
+          if(!String(id).trim() || !String(name).trim()) { pushToast('กรุณากรอก ID และ ชื่อ-สกุล'); return; }
+          try{
+            await postScript(cfg,{action:'append_user', user:{id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim()}});
+            setNewUser({id:'',name:'',type:''});
+            setAdding(false);
+            await loadAll();
+            pushToast('เพิ่มพนักงานเรียบร้อย','ok');
+          }catch(e){ pushToast('เพิ่มพนักงานไม่สำเร็จ: '+(e?.message||e)); }
+        }
+        function onSubmitAdd(e){ e.preventDefault(); addUser(); }
+
+        async function deleteUser(id){
+          if(VIEW_ONLY) return alert('View-only mode');
+          if(!confirm('แน่ใจว่าต้องการลบพนักงาน ID '+id+' ?')) return;
+          try{
+            const r = await postScript(cfg,{action:'delete_user', employeeId: String(id)});
+            if(r && r.ok){
+              setUsers(us => us.filter(u => u.id !== id));
+              setTasks(ts => ts.map(t => ({...t, assignedList:(t.assignedList||[]).filter(eid => eid !== id)})));
+              pushToast('ลบพนักงานสำเร็จ','ok');
+            }else{
+              pushToast('ลบพนักงานไม่สำเร็จ');
+            }
+          }catch(e){ pushToast('ลบพนักงานไม่สำเร็จ: '+(e?.message||e)); }
+        }
+
+        const TypeSelect = ({value,onChange,withAll=false}) => {
+          const uniq = sheetTypes;
+          return (
+            <select className="select w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={value} onChange={e=>onChange(e.target.value)}>
+              {withAll && <option value="All">All</option>}
+              {uniq.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          );
+        };
+
+        const Tile = ({station}) => { const t = taskByStation.get(station) || {station, assignedList:[]}; const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean); const missing = !taskByStation.get(station);
+          return (<div className={`tile ${missing?'missing':''}`} onDragOver={(e)=>{e.preventDefault(); e.currentTarget.classList.add('drop');}} onDragLeave={(e)=>{e.currentTarget.classList.remove('drop');}} onDrop={(e)=>{ e.currentTarget.classList.remove('drop'); onDropTile(e, station);}} title={station}>
+            <div className="flex items-center gap-2 w-full justify-between"><div className="tileTitle">{station}</div>{t.type && <span className="pill text-slate-600">{t.type}</span>}</div>
+            {assigned.length>0 ? (
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {assigned.slice(0,6).map(a => (
+                  <span key={a.id} className="flex items-center gap-1">
+                    <span className="avatar" style={{background:colorFor(a.id)}}>{(a.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                    <span className="text-xs text-slate-700">{a.name}{a?.type ? ' ('+a.type+')' : ''}</span>
+                  </span>
+                ))}
+                {assigned.length>6 && <span className="text-xs text-slate-500">+{assigned.length-6}</span>}
+              </div>
+            ) : (<div className="pill">ลากชื่อพนักงานมาวาง</div>)}
+          </div>);
+        };
+
+        function IssuesPage({ goPlan }){
+          const [form, setForm] = useState({employeeId:'', taskId:'', message:''});
+          const [files, setFiles] = useState([]);
+          const stations = Object.values(STATIONS).flat();
+          useEffect(()=>{ if(!issues?.length) loadIssues(); }, []);
+          const onFiles = (e)=>{ setFiles(Array.from(e.target.files||[]).slice(0,4)); };
+          
+async function submitIssue(e){
+  e.preventDefault();
+  if(!form.message.trim()) return pushToast('กรุณากรอกข้อความปัญหา');
+  try{
+    // Read files as base64 to avoid multipart CORS preflight
+    const filesPayload = [];
+    for (const f of files) {
+      const data = await new Promise((resolve, reject)=>{
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result||'').split(',').pop());
+        fr.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'));
+        fr.readAsDataURL(f);
+      });
+      filesPayload.push({name: f.name||'image.png', type: f.type||'image/png', data});
+    }
+    const r = await postScript(cfg, {
+      action: 'create_issue_base64',
+      employeeId: form.employeeId||'',
+      taskId: form.taskId||'',
+      message: form.message||'',
+      files: filesPayload
+    });
+    if(r && r.ok){
+      pushToast('เปิดเคสสำเร็จ','ok');
+      setForm({employeeId:'', taskId:'', message:''});
+      setFiles([]);
+      loadIssues();
+    } else {
+      pushToast('เปิดเคสไม่สำเร็จ: ' + (r && r.error ? r.error : 'unknown'));
+    }
+  }catch(e){
+    pushToast('เปิดเคสไม่สำเร็จ: ' + (e?.message||e));
+  }
+}
+
+          return (
+            <div className="grid grid-cols-12 gap-6">
+              <div className="col-span-12 md:col-span-4">
+                <div className="card p-4">
+                  <div className="text-lg font-semibold mb-2">เปิดเคสปัญหา</div>
+                  <form onSubmit={submitIssue} className="space-y-3">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">เลือกพนักงาน (ถ้ามี)</div>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.employeeId} onChange={e=>setForm({...form, employeeId:e.target.value})}>
+                        <option value="">(ไม่ระบุ)</option>
+                        {users.map(u=><option key={u.id} value={u.id}>{u.name} {u.type?`(${u.type})`:''} — {u.id}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">งาน/สแตชัน (ถ้ามี)</div>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.taskId} onChange={e=>setForm({...form, taskId:e.target.value})}>
+                        <option value="">(ไม่ระบุ)</option>
+                        {stations.map(st=><option key={st} value={st}>{st}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">ข้อความปัญหา *</div>
+                      <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows="4" value={form.message} onChange={e=>setForm({...form, message:e.target.value})} required />
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">แนบรูป (สูงสุด 4 รูป)</div>
+                      <input type="file" accept="image/*" multiple onChange={onFiles} />
+                      {files.length>0 && (
+                        <div className="flex gap-2 mt-2 flex-wrap">
+                          {files.map((f,i)=>(<div key={i} className="text-xs bg-slate-100 px-2 py-1 rounded">{f.name}</div>))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button type="submit" className="btnP">บันทึกเคส</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              <div className="col-span-12 md:col-span-8">
+                <div className="card p-4">
+                  <div className="text-lg font-semibold mb-2">ประวัติปัญหา</div>
+                  <div className="overflow-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="text-left text-slate-500">
+                        <tr><th className="py-2 pr-3">เวลา</th><th className="py-2 pr-3">พนักงาน</th><th className="py-2 pr-3">สแตชัน</th><th className="py-2 pr-3">ข้อความ</th><th className="py-2">รูป</th></tr>
+                      </thead>
+                      <tbody>
+                        {issues.map((it,idx)=>(
+                          <tr key={idx} className="border-t">
+                            <td className="py-2 pr-3">{it.time||''}</td>
+                            <td className="py-2 pr-3">{it.employeeName?`${it.employeeName} (${it.employeeId||''})`:(it.employeeId||'')}</td>
+                            <td className="py-2 pr-3">{it.taskId||''}</td>
+                            <td className="py-2 pr-3 whitespace-pre-wrap">{it.message||''}</td>
+                            <td className="py-2">
+                              <div className="flex gap-2 flex-wrap">
+                                {(it.images||[]).map((url,i)=>(<a key={i} href={url} target="_blank" className="text-sky-600 underline">รูป {i+1}</a>))}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (<div className="min-h-screen">
+          <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+              <div className="text-xl md:text-2xl font-bold">Building Floor Plan</div>
+              <div className="ml-6 flex items-center gap-2">
+                <button className={`btn ${page==='plan'?'btnP text-white border-sky-500':''}`} onClick={()=>setPage('plan')}>แผนผัง</button>
+                <button className={`btn ${page==='issues'?'btnP text-white border-sky-500':''}`} onClick={()=>{ setPage('issues'); loadIssues(); }}>ปัญหา</button>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                {!VIEW_ONLY && page==='plan' && <button onClick={clearAll} className="btn">🧹 ล้างทั้งหมด</button>}
+                {!VIEW_ONLY && <button onClick={()=>setAdding(true)} className="btn">+ เพิ่มพนักงาน</button>}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-7xl mx-auto px-4 py-5">
+            {page==='plan' ? (
+              <div className="grid grid-cols-12 gap-6">
+                <aside className="col-span-12 md:col-span-3"><div className="card p-3">
+                  <div className="flex items-center gap-2 text-slate-700 font-semibold mb-2"><span className="w-5 h-5 rounded bg-sky-500 text-white grid place-items-center text-[10px]">E</span>Employees</div>
+                  <input placeholder="Search by name..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
+                  <div className="mt-2"><TypeSelect value={typeFilter} onChange={setTypeFilter} withAll /></div>
+                  <div className="mt-3 max-h-[60vh] overflow-auto pr-1">
+                    {filteredUsers.map(u => (<div key={u.id} draggable={!VIEW_ONLY} onDragStart={(e)=>onDragStartEmp(e,u)} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50">
+                      <span className="avatar" style={{background:colorFor(u.id)}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
+                        <div className="text-[10px] text-slate-500">{u.id}</div>
+                      </div>
+                      {!VIEW_ONLY && <button className="text-rose-600 text-xs border px-2 py-1 rounded" onClick={()=>deleteUser(u.id)}>ลบ</button>}
+                    </div>))}
+                  </div>
+                  <div className="mt-3">{!VIEW_ONLY && <button onClick={()=>autoAssignOnePerStation(null)} className="btnP w-full">🎲 สุ่มมอบหมาย (Picker)</button>}</div>
+                </div></aside>
+
+                <section className="col-span-12 md:col-span-9">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {['Floor 1','Floor 2','Floor 3'].map(floor => (
+                      <div key={floor} className={floor==='Floor 1'?'floor1':floor==='Floor 2'?'floor2':'floor3'}>
+                        <div className="sectionHead mb-2 flex items-center justify-between">
+                          <div className="floorTitle text-lg">{floor}</div>
+                          <div className="flex items-center gap-2">
+                            {!VIEW_ONLY && <button className="btn" onClick={() => clearFloor(floor)}>🧹 ล้าง</button>}
+                            {!VIEW_ONLY && <button className="btnP" onClick={() => autoAssignOnePerStation(floor)}>🎲 สุ่ม (Picker)</button>}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                          {(STATIONS[floor]||[]).map(st => <Tile key={st} station={st} />)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <IssuesPage goPlan={()=>setPage('plan')}/>
+            )}
+          </div>
+
+          <div className="text-center text-xs text-slate-500 pb-6">{loading?'Loading…':err?`เกิดข้อผิดพลาด: ${err}`:'พร้อมใช้งาน'}</div>
+
+          {adding && (<div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50"><div className="card w-[520px] max-w-[95vw] p-4">
+            <div className="text-lg font-semibold">เพิ่มพนักงาน</div>
+            <form onSubmit={onSubmitAdd}>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div><div className="text-xs text-slate-500 mb-1">ID (คอลัมน์ B) *</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.id} onChange={e=>setNewUser({...newUser,id:e.target.value})} required /></div>
+                <div><div className="text-xs text-slate-500 mb-1">ชื่อ-นามสกุล (คอลัมน์ C) *</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})} required /></div>
+                <div className="col-span-2"><div className="text-xs text-slate-500 mb-1">TYPE (คอลัมน์ E)</div>
+                  <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.type} onChange={e=>setNewUser({...newUser,type:e.target.value})}>
+                    <option value="">(ไม่ระบุ)</option>
+                    {sheetTypes.map(t=>(<option key={t} value={t}>{t}</option>))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button type="button" className="btn" onClick={()=>setAdding(false)}>ยกเลิก</button>
+                <button type="submit" className="btnP">บันทึก</button>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-3">
+                * ระบบจะเพิ่มข้อมูลลงแถวสุดท้ายของชีต <span class="mono">User</span> (B=ID, C=ชื่อ, E=TYPE)
+              </div>
+            </form>
+          </div></div>)}
+
+          <div className="fab">
+            <button className="btnP rounded-full px-4 py-3 shadow" onClick={()=>setChatOpen(v=>!v)}>{chatOpen?'ปิดผู้ช่วย':'AI ผู้ช่วย'}</button>
+          </div>
+          {chatOpen && (
+            <div className="chatbox">
+              <div className="card p-3">
+                <div className="font-semibold mb-2">AI ผู้ช่วย</div>
+                <div className="max-h-64 overflow-auto mb-2 space-y-2">
+                  {chatMsgs.filter(m=>m.role!=='system').map((m,i)=>(
+                    <div key={i} className={m.role==='user'?'text-right':'text-left'}>
+                      <div className={`inline-block px-3 py-2 rounded-lg ${m.role==='user'?'bg-sky-100':'bg-slate-100'}`}>{m.content}</div>
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={async (e)=>{
+                  e.preventDefault();
+                  const v = chatInputRef.current.value.trim(); if(!v) return;
+                  const msgs = [...chatMsgs, {role:'user', content:v}];
+                  setChatMsgs(msgs);
+                  chatInputRef.current.value='';
+                  try{
+                    const r = await postScript(cfg, { action:'ai_chat', messages: msgs.filter(m=>m.role!=='system') });
+                    const reply = (r && r.ok && r.reply) ? r.reply : 'ไม่สามารถติดต่อผู้ช่วยได้';
+                    setChatMsgs(ms => [...ms, {role:'assistant', content: reply}]);
+                  }catch(e){ setChatMsgs(ms => [...ms, {role:'assistant', content: 'เกิดข้อผิดพลาดที่ฝั่งเซิร์ฟเวอร์'}]); }
+                }} className="flex items-center gap-2">
+                  <input ref={chatInputRef} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="ถามผู้ช่วย..." />
+                  <button className="btnP" type="submit">ส่ง</button>
+                </form>
+                <div className="text-[11px] text-slate-500 mt-1">* ต้องตั้งค่า API key ใน Apps Script ก่อน</div>
+              </div>
+            </div>
+          )}
+        </div>);
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    </script>
+
+    <!-- Firebase init (optional) -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+      const firebaseConfig = {
+        apiKey: "AIzaSyDKjTBVxrEJcvp1a6I6eGs_vdlEAoQLyd0",
+        authDomain: "building-floor-plan.firebaseapp.com",
+        projectId: "building-floor-plan",
+        storageBucket: "building-floor-plan.firebasestorage.app",
+        messagingSenderId: "648150839896",
+        appId: "1:648150839896:web:3ccf62db08f7ec1078502d"
+      };
+      const fbApp = initializeApp(firebaseConfig);
+      window.firebaseApp = fbApp;
+    </script>
+  </body>
+</html>
