@@ -111,7 +111,16 @@
         return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>{
           const station=String(ixStation>=0?r[ixStation]:r[0]||'').trim();
           const assignedRaw = String(ixAssigned>=0?r[ixAssigned]:'').trim();
-          const list = assignedRaw ? assignedRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+          let list = [];
+          if(assignedRaw){
+            try{
+              const arr = JSON.parse(assignedRaw);
+              if(Array.isArray(arr)) list = arr.map(s=>String(s).trim()).filter(s=>s && s!=='[]');
+              else list = [String(arr).trim()];
+            }catch{
+              list = assignedRaw.split(',').map(s=>s.trim()).filter(Boolean);
+            }
+          }
           return {
             id: station || Math.random().toString(36).slice(2),
             station,
@@ -120,6 +129,34 @@
             assignedList: list,
           };
         });
+      }
+
+      function parseUsers(values){
+        if(!values?.length) return [];
+        const h=values[0], rows=values.slice(1);
+        const ixId=guessHeaderIndex(h,['id','รหัส']);
+        const ixName=guessHeaderIndex(h,['name','ชื่อ','ชื่อ-นามสกุล']);
+        const ixType=guessHeaderIndex(h,['type','ประเภท']);
+        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>({
+          id:String(ixId>=0?r[ixId]:'').trim(),
+          name:String(ixName>=0?r[ixName]:'').trim(),
+          type:String(ixType>=0?r[ixType]:'').trim()||undefined
+        })).filter(r=>r.id && r.name);
+      }
+
+      function parseIssues(values){
+        if(!values?.length) return [];
+        const h=values[0], rows=values.slice(1);
+        const ixTime=guessHeaderIndex(h,['time','เวลา']);
+        const ixUser=guessHeaderIndex(h,['employee','พนักงาน','user']);
+        const ixTask=guessHeaderIndex(h,['task','งานที่เกี่ยวข้อง']);
+        const ixText=guessHeaderIndex(h,['text','ข้อความ','description']);
+        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>({
+          time:String(ixTime>=0?r[ixTime]:'').trim(),
+          user:String(ixUser>=0?r[ixUser]:'').trim(),
+          task:String(ixTask>=0?r[ixTask]:'').trim(),
+          text:String(ixText>=0?r[ixText]:'').trim(),
+        }));
       }
 
       async function fetchValues(cfg, sheet, range){
@@ -193,11 +230,16 @@
           setLoading(true);
           try{
             const [u, p] = await Promise.all([
-              postScript(cfg, {action:'list_users'}),
+              postScript(cfg, {action:'list_users'}).catch(()=>null),
               fetchValues(cfg, 'Plan', 'A1:Z')
             ]);
-            setUsers((u && u.ok && Array.isArray(u.items)) ? u.items : []);
             setTasks(parsePlan(p));
+            if (u && u.ok && Array.isArray(u.items)) {
+              setUsers(u.items);
+            } else {
+              const uVals = await fetchValues(cfg, SHEET_USER, 'A1:Z').catch(()=>[]);
+              setUsers(parseUsers(uVals));
+            }
             setErr(null);
           }catch(e){ setErr('Failed to fetch'); }
           finally{ setLoading(false); }
@@ -205,7 +247,14 @@
         const loadIssues = async () => {
           try{
             const r = await postScript(cfg, {action:'list_issues'});
-            if (r && r.ok && Array.isArray(r.items)) setIssues(r.items);
+            if (r && r.ok && Array.isArray(r.items)) {
+              setIssues(r.items);
+              return;
+            }
+          }catch(e){}
+          try{
+            const vals = await fetchValues(cfg, SHEET_ISSUE, 'A1:Z');
+            setIssues(parseIssues(vals));
           }catch(e){ pushToast('โหลดปัญหาไม่สำเร็จ: ' + (e?.message||e)); }
         };
         useEffect(()=>{ loadAll(); loadIssues(); }, [cfg.SHEET_ID, cfg.API_KEY]);
