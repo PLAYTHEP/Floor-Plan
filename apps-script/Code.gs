@@ -95,10 +95,12 @@ function handle(p){
     // Users
     if (a==='append_user')          return api_appendUser_(p);
     if (a==='delete_user')          return api_deleteUser_(p);
+    if (a==='list_users')           return api_listUsers_(p);
 
     // Issues
     if (a==='create_issue_base64')  return api_createIssueBase64_(p);
     if (a==='list_issues')          return api_listIssues_(p);
+    if (a==='update_issue_status')  return api_updateIssueStatus_(p);
 
     // KPI
     if (a==='create_kpi')           return api_createKPI_(p);
@@ -327,6 +329,18 @@ function api_deleteUser_(p){
   }
   return _json({ok:true});
 }
+function api_listUsers_(_p){
+  var sh=_sh(SHEET_USER); if (sh.getLastRow()<2) return _json({ok:true, items:[]});
+  var values=sh.getRange(2,1,sh.getLastRow()-1, sh.getLastColumn()).getValues();
+  var H=_headers(sh);
+  var cId=_colIndex(H,['id','รหัส'],2)-1;
+  var cName=_colIndex(H,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล'],3)-1;
+  var cType=_colIndex(H,['type','ประเภท','ชนิด'],5)-1;
+  var items=values.map(function(r){
+    return { id:String(r[cId]||'').trim(), name:String(r[cName]||'').trim(), type:String(r[cType]||'').trim() };
+  }).filter(function(u){ return u.id && u.name; });
+  return _json({ok:true, items:items});
+}
 
 /************ ISSUES ************/
 function _userNameById_(id){
@@ -341,7 +355,7 @@ function _userNameById_(id){
 }
 function _appendIssueRow_(empId, taskId, message, linksArr){
   var sh=_sh(SHEET_ISS);
-  if (sh.getLastRow()===0) sh.appendRow(['เวลา','รหัส','พนักงาน','งานที่เกี่ยวข้อง','ข้อความ','รูป']);
+  if (sh.getLastRow()===0) sh.appendRow(['เวลา','รหัส','พนักงาน','งานที่เกี่ยวข้อง','ข้อความ','รูป','สถานะ']);
   var H=_headers(sh);
   var cTime=_colIndex(H,['เวลา','time','timestamp'],1);
   var cEmp=_colIndex(H,['รหัส','รหัสพนักงาน','employeeid','empid'],2);
@@ -349,7 +363,8 @@ function _appendIssueRow_(empId, taskId, message, linksArr){
   var cTask=_colIndex(H,['งานที่เกี่ยวข้อง','task','taskid','station','สแตชัน','สถานี'],4);
   var cMsg=_colIndex(H,['ข้อความ','message','content'],5);
   var cImg=_colIndex(H,['รูป','images','attachments'],6);
-  var maxC=Math.max(cTime,cEmp,cName,cTask,cMsg,cImg);
+  var cStatus=_colIndex(H,['สถานะ','status'],7);
+  var maxC=Math.max(cTime,cEmp,cName,cTask,cMsg,cImg,cStatus);
   var row=new Array(maxC).fill('');
   row[cTime-1]=_nowStr();
   row[cEmp-1]=String(empId||'');
@@ -357,6 +372,7 @@ function _appendIssueRow_(empId, taskId, message, linksArr){
   row[cTask-1]=String(taskId||'');
   row[cMsg-1]=String(message||'');
   row[cImg-1]=(linksArr||[]).join(',');
+  row[cStatus-1]='open';
   sh.appendRow(row);
 }
 function api_createIssueBase64_(p){
@@ -380,13 +396,23 @@ function api_listIssues_(_p){
   var ixTask=_colIndex(H,['งานที่เกี่ยวข้อง','task','taskid','station','สแตชัน','สถานี'],4)-1;
   var ixMsg=_colIndex(H,['ข้อความ','message','content'],5)-1;
   var ixImgs=_colIndex(H,['รูป','images','attachments'],6)-1;
-  var items=values.map(function(r){
+  var ixStatus=_colIndex(H,['สถานะ','status'],7)-1;
+  var items=values.map(function(r,i){
     var empId=String(r[ixEmp]||'').trim();
     var name = ixName>=0 ? String(r[ixName]||'').trim() : _userNameById_(empId);
     var imgs=String(r[ixImgs]||'').split(',').map(function(s){return s.trim();}).filter(String);
-    return { time:r[ixTime]||'', employeeId:empId, employeeName:name, taskId:r[ixTask]||'', message:r[ixMsg]||'', images:imgs };
+    return { rowIndex:i+2, time:r[ixTime]||'', employeeId:empId, employeeName:name, taskId:r[ixTask]||'', message:r[ixMsg]||'', images:imgs, status: r[ixStatus]||'' };
   });
+  items.sort(function(a,b){ var sa=String(a.status||'').toLowerCase()==='open'?0:1; var sb=String(b.status||'').toLowerCase()==='open'?0:1; if(sa!==sb) return sa-sb; return String(b.time).localeCompare(String(a.time)); });
   return _json({ok:true, items});
+}
+function api_updateIssueStatus_(p){
+  var row=parseInt(p.rowIndex,10); var status=String(p.status||'').trim();
+  if(!row || !status) throw new Error('rowIndex & status required');
+  var sh=_sh(SHEET_ISS); if (row<2 || row>sh.getLastRow()) throw new Error('row out of range');
+  var H=_headers(sh); var cStatus=_colIndex(H,['สถานะ','status'],7);
+  sh.getRange(row, cStatus).setValue(status);
+  return _json({ok:true});
 }
 
 /************ KPI ************/
