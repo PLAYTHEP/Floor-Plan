@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       html,body,#root{height:100%}
       .card{border:1px solid rgba(148,163,184,.25);border-radius:1rem;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
@@ -63,6 +64,7 @@
       };
 
       const VIEW_ONLY = new URLSearchParams(location.search).get('mode') === 'view';
+      const VIEW_FLOOR = new URLSearchParams(location.search).get('floor');
       const STATIONS = {
         'Floor 1': ['1101','1102','1103','1104','1105','1106','1107','1201','1203','1205'],
         'Floor 2': ['2101','2102','2103','2104','2105','2201','2203','2205'],
@@ -99,20 +101,6 @@
       };
       const colorFor = key => { const colors=['#0ea5e9','#06b6d4','#14b8a6','#22c55e','#a3e635','#eab308','#f59e0b','#ef4444','#6366f1','#8b5cf6','#ec4899','#f43f5e']; let hash=0; for(let i=0;i<key.length;i++) hash=(hash*31+key.charCodeAt(i))>>>0; return colors[hash%colors.length]; };
 
-      function parseUsers(values){
-        if(!values?.length) return [];
-        const h=values[0], rows=values.slice(1);
-        const ixId=guessHeaderIndex(h,['id','รหัส']);
-        const ixName=guessHeaderIndex(h,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล']);
-        const ixRole=guessHeaderIndex(h,['role','หน้าที่']);
-        const ixType=guessHeaderIndex(h,['type','ประเภท','ชนิด']);
-        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>({
-          id:   String(ixId>=0?r[ixId]:r[0]||'').trim(),
-          name: String(ixName>=0?r[ixName]:r[1]||'').trim(),
-          role: String(ixRole>=0?r[ixRole]:'').trim()||undefined,
-          type: String(ixType>=0?r[ixType]:'').trim()||undefined,
-        })).filter(u=>u.id && u.name);
-      }
       function parsePlan(values){
         if(!values?.length) return [];
         const h=values[0], rows=values.slice(1);
@@ -205,10 +193,10 @@
           setLoading(true);
           try{
             const [u, p] = await Promise.all([
-              fetchValues(cfg, 'User', 'B1:F'),
+              postScript(cfg, {action:'list_users'}),
               fetchValues(cfg, 'Plan', 'A1:Z')
             ]);
-            setUsers(parseUsers(u));
+            setUsers((u && u.ok && Array.isArray(u.items)) ? u.items : []);
             setTasks(parsePlan(p));
             setErr(null);
           }catch(e){ setErr('Failed to fetch'); }
@@ -376,6 +364,13 @@
           const stations = Object.values(STATIONS).flat();
           useEffect(()=>{ if(!issues?.length) loadIssues(); }, []);
           const onFiles = (e)=>{ setFiles(Array.from(e.target.files||[]).slice(0,4)); };
+          const closeIssue = async (rowIndex) => {
+            try{
+              const r = await postScript(cfg,{action:'update_issue_status', rowIndex, status:'closed'});
+              if(r && r.ok){ loadIssues(); pushToast('ปิดเคสแล้ว','ok'); }
+              else pushToast('ปิดเคสไม่สำเร็จ');
+            }catch(e){ pushToast('ปิดเคสไม่สำเร็จ: ' + (e?.message||e)); }
+          };
           
 async function submitIssue(e){
   e.preventDefault();
@@ -457,7 +452,7 @@ async function submitIssue(e){
                   <div className="overflow-auto">
                     <table className="min-w-full text-sm">
                       <thead className="text-left text-slate-500">
-                        <tr><th className="py-2 pr-3">เวลา</th><th className="py-2 pr-3">พนักงาน</th><th className="py-2 pr-3">สแตชัน</th><th className="py-2 pr-3">ข้อความ</th><th className="py-2">รูป</th></tr>
+                        <tr><th className="py-2 pr-3">เวลา</th><th className="py-2 pr-3">พนักงาน</th><th className="py-2 pr-3">สแตชัน</th><th className="py-2 pr-3">ข้อความ</th><th className="py-2 pr-3">รูป</th><th className="py-2 pr-3">สถานะ</th></tr>
                       </thead>
                       <tbody>
                         {issues.map((it,idx)=>(
@@ -466,10 +461,13 @@ async function submitIssue(e){
                             <td className="py-2 pr-3">{it.employeeName?`${it.employeeName} (${it.employeeId||''})`:(it.employeeId||'')}</td>
                             <td className="py-2 pr-3">{it.taskId||''}</td>
                             <td className="py-2 pr-3 whitespace-pre-wrap">{it.message||''}</td>
-                            <td className="py-2">
+                            <td className="py-2 pr-3">
                               <div className="flex gap-2 flex-wrap">
                                 {(it.images||[]).map((url,i)=>(<a key={i} href={url} target="_blank" className="text-sky-600 underline">รูป {i+1}</a>))}
                               </div>
+                            </td>
+                            <td className="py-2 pr-3">
+                              {it.status==='open' && !VIEW_ONLY ? (<button className="text-emerald-600 underline" onClick={()=>closeIssue(it.rowIndex)}>ปิดเคส</button>) : (it.status||'')}
                             </td>
                           </tr>
                         ))}
@@ -522,7 +520,7 @@ async function submitIssue(e){
 
                 <section className="col-span-12 md:col-span-9">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {['Floor 1','Floor 2','Floor 3'].map(floor => (
+                    {Object.keys(STATIONS).filter(f=>!VIEW_FLOOR || VIEW_FLOOR===f).map(floor => (
                       <div key={floor} className={floor==='Floor 1'?'floor1':floor==='Floor 2'?'floor2':'floor3'}>
                         <div className="sectionHead mb-2 flex items-center justify-between">
                           <div className="floorTitle text-lg">{floor}</div>
@@ -614,6 +612,8 @@ async function submitIssue(e){
             totalHour:'', totalUnit:'', totalTote:'', upmhTpmh:'', percent:''
           });
           const [rows,setRows] = useState([]);
+          const chartRef = useRef(null);
+          const chartObj = useRef(null);
           const stations = Object.values(STATIONS).flat();
 
           useEffect(()=>{
@@ -661,6 +661,26 @@ async function submitIssue(e){
 
           useEffect(()=>{ query(); }, [form.userId, form.date]);
 
+          useEffect(()=>{
+            if(!chartRef.current) return;
+            if(chartObj.current) chartObj.current.destroy();
+            const ctx = chartRef.current.getContext('2d');
+            chartObj.current = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: rows.map(r=>r['Date']||''),
+                datasets:[{
+                  label:'Total Unit',
+                  data: rows.map(r=>Number(r['Total Unit']||0)),
+                  borderColor:'#0ea5e9',
+                  fill:false,
+                  tension:0.3
+                }]
+              },
+              options: {responsive:true, scales:{y:{beginAtZero:true}}}
+            });
+          }, [rows]);
+
           return (
             <div className="grid grid-cols-12 gap-6">
               <div className="col-span-12 md:col-span-5">
@@ -707,6 +727,7 @@ async function submitIssue(e){
               <div className="col-span-12 md:col-span-7">
                 <div className="card p-4">
                   <div className="text-lg font-semibold mb-2">ประวัติ KPI</div>
+                  <canvas ref={chartRef} className="mb-4 w-full h-40"></canvas>
                   <div className="overflow-auto">
                     <table className="min-w-full text-sm">
                       <thead className="text-left text-slate-500">
