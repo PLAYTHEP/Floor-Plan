@@ -56,8 +56,7 @@
     <script type="text/babel">
       const {useState, useEffect, useMemo, useRef} = React;
 
-      const DBG = new URLSearchParams(location.search).get('debug')==='1';
-const DEFAULTS = {
+      const DEFAULTS = {
         SHEET_ID: '15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU',
         API_KEY:  'AIzaSyDObfhk_-Rnz5UCzf3Kt_BSqbnK8QoZunk',
         APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec'
@@ -135,7 +134,7 @@ const DEFAULTS = {
         });
       }
 
-      async function fetchValues(cfg, sheet, range){ if(DBG) console.log('[fetchValues]', sheet, range);
+      async function fetchValues(cfg, sheet, range){
         try{
           const r = await fetch(gsRange(cfg.SHEET_ID,cfg.API_KEY,sheet,range));
           const t = await r.text(); let j=null; try{ j = JSON.parse(t); }catch{}
@@ -154,7 +153,7 @@ const DEFAULTS = {
           pushToast('โหลดข้อมูลไม่สำเร็จ (Sheets/API)'); throw e;
         }
       }
-      async function postScript(cfg, payload){ if(DBG) console.log('[postScript]', payload);
+      async function postScript(cfg, payload){
         try{ // JSON
           const r = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
           const text = await r.text(); let j=null; try{ j=JSON.parse(text); }catch{}
@@ -190,6 +189,7 @@ const DEFAULTS = {
         const [page,setPage] = useState('plan'); // 'plan' | 'issues'
         const [users,setUsers] = useState([]);
         const [tasks,setTasks] = useState([]);
+        const [pending, setPending] = useState(new Map()); // station -> list of employeeIds
         const [issues,setIssues] = useState([]);
         const [search,setSearch] = useState('');
         const [typeFilter,setTypeFilter] = useState('All');
@@ -218,9 +218,33 @@ const DEFAULTS = {
           try{
             const r = await postScript(cfg, {action:'list_issues'});
             if (r && r.ok && Array.isArray(r.items)) setIssues(r.items);
-          }catch(e){ pushToast('โหลดปัญหาไม่สำเร็จ'); }
+          }catch(e){ pushToast('โหลดปัญหาไม่สำเร็จ: ' + (e?.message||e)); }
         };
         useEffect(()=>{ loadAll(); loadIssues(); }, [cfg.SHEET_ID, cfg.API_KEY]);
+
+        function markPending(station, list){
+          setPending(prev => {
+            const m = new Map(prev);
+            m.set(String(station), Array.from(new Set(list)));
+            return m;
+          });
+        }
+        function persistPending(){
+          if (pending.size===0) return pushToast('ไม่มีรายการบันทึก');
+          const payload = Array.from(pending.entries()).map(([taskId, list]) => ({taskId, employeeIds:list}));
+          postScript(cfg, {action:'bulk_set_assignees', items: payload})
+            .then(r => {
+              if (!r || r.ok===false) throw new Error(r && r.error ? r.error : 'Apps Script rejected');
+              pushToast('บันทึกสำเร็จ','ok');
+              setPending(new Map());
+              // reload from server
+              return Promise.all([
+                fetchValues(cfg,'Plan','A1:Z')
+              ]).then(([pvals]) => setTasks(parsePlan(pvals)));
+            })
+            .catch(e => pushToast('บันทึกไม่สำเร็จ: ' + (e?.message||e)));
+        }
+
 
         const userMap = useMemo(()=>Object.fromEntries(users.map(u=>[u.id,u])),[users]);
         const taskByStation = useMemo(()=>{ const m = new Map(); tasks.forEach(t => m.set(String(t.station), t)); return m; }, [tasks]);
@@ -250,11 +274,10 @@ const DEFAULTS = {
             copy.forEach(t => { const idx = (t.assignedList||[]).indexOf(emp.id); if(idx>-1) t.assignedList.splice(idx,1); });
             let tgt = copy.find(t => t.station===station); if(!tgt) { tgt={station, id:station, assignedList:[]}; copy.push(tgt); }
             if(!tgt.assignedList.includes(emp.id)) tgt.assignedList.push(emp.id);
+            // mark pending for target station
+            markPending(station, tgt.assignedList);
             return copy; });
-          const target = taskByStation.get(station) || {assignedList:[]};
-          const newList = Array.from(new Set([...(target.assignedList||[]).filter(id=>id!==emp.id), emp.id]));
-          await saveAssignees(station, newList, 'assigned');
-          pushToast(`มอบหมาย ${emp.name} → ${station}`, 'ok');
+          pushToast(`มอบหมาย ${emp.name} → ${station} (ยังไม่บันทึก)`, 'ok');
         };
 
         function autoAssignOnePerStation(filterFloor=null){
@@ -276,7 +299,7 @@ const DEFAULTS = {
           const ops = []; const newTasks = tasks.map(t => ({...t, assignedList:[...(t.assignedList||[])]}));
           need.forEach((st, i) => { const id = available[i]; if(!id) return; newTasks.forEach(t => { const k=t.assignedList.indexOf(id); if(k>-1) t.assignedList.splice(k,1); }); let t = newTasks.find(x=>x.station===st); if(!t) { t={station:st,id:st,assignedList:[]}; newTasks.push(t); } t.assignedList.push(id); ops.push({st, list:[...t.assignedList]}); });
           setTasks(newTasks);
-          Promise.all(ops.map(op => saveAssignees(op.st, op.list, 'assigned'))).then(()=>pushToast('สุ่มมอบหมาย (Picker) เสร็จสิ้น','ok')).catch(()=>pushToast('สุ่มมอบหมายบางส่วนไม่สำเร็จ'));
+          ops.forEach(op => markPending(op.st, op.list)); pushToast('สุ่มมอบหมาย (Picker) เสร็จสิ้น — อย่าลืมกดบันทึก','ok');
         }
 
         async function clearFloor(floor){
@@ -284,7 +307,7 @@ const DEFAULTS = {
           const stations = STATIONS[floor] || [];
           const newTasks = tasks.map(t => ({...t, assignedList: stations.includes(String(t.station)) ? [] : (t.assignedList||[]) }));
           setTasks(newTasks);
-          try{ await Promise.all(stations.map(st => saveAssignees(st, [], undefined))); pushToast('ล้างคนออกจาก '+floor+' เรียบร้อย','ok'); }catch(e){ pushToast('ล้างไม่สำเร็จบางส่วน'); }
+          stations.forEach(st => markPending(st, [])); pushToast('ล้างคนออกจาก '+floor+' (ยังไม่บันทึก)','ok');
         }
         async function clearAll(){
           await clearFloor('Floor 1'); await clearFloor('Floor 2'); await clearFloor('Floor 3');
@@ -295,7 +318,8 @@ const DEFAULTS = {
           const {id,name,type} = newUser;
           if(!String(id).trim() || !String(name).trim()) { pushToast('กรุณากรอก ID และ ชื่อ-สกุล'); return; }
           try{
-            await postScript(cfg,{action:'append_user', user:{id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim()}});
+            const resp = await postScript(cfg,{action:'append_user', user:{id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim()}});
+            if(!resp || resp.ok===false){ throw new Error(resp && resp.error ? resp.error : 'Apps Script rejected'); }
             setNewUser({id:'',name:'',type:''});
             setAdding(false);
             await loadAll();
@@ -329,9 +353,9 @@ const DEFAULTS = {
           );
         };
 
-        const Tile = ({station}) => { const t = taskByStation.get(station) || {station, assignedList:[]}; const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean); const missing = !taskByStation.get(station);
+        const Tile = ({station}) => { const t = taskByStation.get(station) || {station, assignedList:[]}; const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean); const missing = !taskByStation.get(station); const isDirty = pending.has(String(station));
           return (<div className={`tile ${missing?'missing':''}`} onDragOver={(e)=>{e.preventDefault(); e.currentTarget.classList.add('drop');}} onDragLeave={(e)=>{e.currentTarget.classList.remove('drop');}} onDrop={(e)=>{ e.currentTarget.classList.remove('drop'); onDropTile(e, station);}} title={station}>
-            <div className="flex items-center gap-2 w-full justify-between"><div className="tileTitle">{station}</div>{t.type && <span className="pill text-slate-600">{t.type}</span>}</div>
+            <div className="flex items-center gap-2 w-full justify-between"><div className="tileTitle flex items-center gap-2">{station}{isDirty && <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" title="มีการเปลี่ยนแปลงรอบันทึก"></span>}</div>{t.type && <span className="pill text-slate-600">{t.type}</span>}</div>
             {assigned.length>0 ? (
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {assigned.slice(0,6).map(a => (
@@ -461,12 +485,15 @@ async function submitIssue(e){
         return (<div className="min-h-screen">
           <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200">
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
-              <div className="text-xl md:text-2xl font-bold">Building Floor Plan</div>
+              <button className="text-xl md:text-2xl font-bold hover:text-sky-600" onClick={()=>setPage('plan')}>Building Floor Plan</button>
               <div className="ml-6 flex items-center gap-2">
                 <button className={`btn ${page==='plan'?'btnP text-white border-sky-500':''}`} onClick={()=>setPage('plan')}>แผนผัง</button>
-                <button className={`btn ${page==='issues'?'btnP text-white border-sky-500':''}`} onClick={()=>{ setPage('issues'); loadIssues(); }}>ปัญหา</button>
+                <button className={`btn ${page==='issues'?'btnP text-white border-sky-500':''}`} onClick={()=>{ setPage('issues'); setTimeout(()=>loadIssues(), 50); }}>ปัญหา</button>
+                <button className={`btn ${page==='kpi'?'btnP text-white border-sky-500':''}`} onClick={()=>setPage('kpi')}>KPI</button>
               </div>
               <div className="ml-auto flex items-center gap-2">
+                <a className="btn" href="https://docs.google.com/spreadsheets/d/15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU/edit?gid=991243293#gid=991243293" target="_blank" rel="noopener">Excel</a>
+                {!VIEW_ONLY && page==='plan' && <button className="btnP" onClick={persistPending} disabled={pending.size===0}>บันทึก{pending.size>0?` (${pending.size})`:``}</button>}
                 {!VIEW_ONLY && page==='plan' && <button onClick={clearAll} className="btn">🧹 ล้างทั้งหมด</button>}
                 {!VIEW_ONLY && <button onClick={()=>setAdding(true)} className="btn">+ เพิ่มพนักงาน</button>}
               </div>
@@ -577,6 +604,137 @@ async function submitIssue(e){
           )}
         </div>);
       }
+
+      
+        function KPIPage(){
+          const [form,setForm] = useState({
+            userId:'', date: new Date().toISOString().slice(0,10), userName:'', kpiTarget:'',
+            station:'', floor:'', shift:'', function:'',
+            standardHour:'', productiveHour:'', idleTime:'', breakTime:'',
+            totalHour:'', totalUnit:'', totalTote:'', upmhTpmh:'', percent:''
+          });
+          const [rows,setRows] = useState([]);
+          const stations = Object.values(STATIONS).flat();
+
+          useEffect(()=>{
+            if (form.userId && !form.userName) {
+              const u = users.find(x=>x.id===form.userId);
+              if (u) setForm(f=>({...f,userName:u.name}));
+            }
+          },[form.userId, users]);
+
+          async function saveKPI(e){
+            e.preventDefault();
+            if (!form.userId) return pushToast('กรุณาเลือกพนักงาน');
+            try{
+              const r = await postScript(cfg, { action:'create_kpi', record: {
+                'User ID': form.userId,
+                'Date': form.date,
+                'UserName': form.userName,
+                'KPI Target': form.kpiTarget,
+                'Station': form.station,
+                'Floor': form.floor,
+                'Shift': form.shift,
+                'Function': form.function,
+                'Standard Hour': form.standardHour,
+                'Productive Hour': form.productiveHour,
+                'Idle Time': form.idleTime,
+                'Break Time': form.breakTime,
+                'Total Hour': form.totalHour,
+                'Total Unit': form.totalUnit,
+                'Total Tote': form.totalTote,
+                'UPMH / TPMH': form.upmhTpmh,
+                'PERCENT': form.percent
+              }});
+              if (!r || r.ok===false) throw new Error(r && r.error ? r.error : 'Apps Script rejected');
+              pushToast('บันทึก KPI สำเร็จ','ok');
+              await query();
+            }catch(e){ pushToast('บันทึก KPI ไม่สำเร็จ: ' + (e?.message||e)); }
+          }
+
+          async function query(){
+            try{
+              const r = await postScript(cfg, { action:'list_kpi', userId: form.userId||'', date: form.date||'' });
+              if (r && r.ok) setRows(r.items||[]);
+            }catch(e){ pushToast('โหลด KPI ไม่สำเร็จ: ' + (e?.message||e)); }
+          }
+
+          useEffect(()=>{ query(); }, [form.userId, form.date]);
+
+          return (
+            <div className="grid grid-cols-12 gap-6">
+              <div className="col-span-12 md:col-span-5">
+                <div className="card p-4">
+                  <div className="text-lg font-semibold mb-3">บันทึก KPI</div>
+                  <form onSubmit={saveKPI} className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <div className="text-xs text-slate-500 mb-1">พนักงาน *</div>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        value={form.userId} onChange={e=>setForm({...form, userId:e.target.value})}>
+                        <option value="">-- เลือก --</option>
+                        {users.map(u=><option key={u.id} value={u.id}>{u.name} ({u.id})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">วันที่</div>
+                      <input type="date" className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        value={form.date} onChange={e=>setForm({...form, date:e.target.value})}/>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Station</div>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.station} onChange={e=>setForm({...form, station:e.target.value})}>
+                        <option value="">-</option>
+                        {stations.map(st=><option key={st} value={st}>{st}</option>)}
+                      </select>
+                    </div>
+                    <div><div className="text-xs text-slate-500 mb-1">Floor</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.floor} onChange={e=>setForm({...form, floor:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Shift</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.shift} onChange={e=>setForm({...form, shift:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Function</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.function} onChange={e=>setForm({...form, function:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">KPI Target</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.kpiTarget} onChange={e=>setForm({...form, kpiTarget:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Standard Hour</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.standardHour} onChange={e=>setForm({...form, standardHour:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Productive Hour</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.productiveHour} onChange={e=>setForm({...form, productiveHour:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Idle Time</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.idleTime} onChange={e=>setForm({...form, idleTime:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Break Time</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.breakTime} onChange={e=>setForm({...form, breakTime:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Total Hour</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.totalHour} onChange={e=>setForm({...form, totalHour:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Total Unit</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.totalUnit} onChange={e=>setForm({...form, totalUnit:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">Total Tote</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.totalTote} onChange={e=>setForm({...form, totalTote:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">UPMH / TPMH</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.upmhTpmh} onChange={e=>setForm({...form, upmhTpmh:e.target.value})}/></div>
+                    <div><div className="text-xs text-slate-500 mb-1">PERCENT</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.percent} onChange={e=>setForm({...form, percent:e.target.value})}/></div>
+                    <div className="col-span-2 flex justify-end gap-2 mt-2"><button type="submit" className="btnP">บันทึก KPI</button></div>
+                  </form>
+                </div>
+              </div>
+              <div className="col-span-12 md:col-span-7">
+                <div className="card p-4">
+                  <div className="text-lg font-semibold mb-2">ประวัติ KPI</div>
+                  <div className="overflow-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="text-left text-slate-500">
+                        <tr>
+                          <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">User</th><th className="py-2 pr-3">Station</th><th className="py-2 pr-3">Total Hour</th><th className="py-2 pr-3">Total Unit</th><th className="py-2 pr-3">UPMH/TPMH</th><th className="py-2 pr-3">%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((r,i)=>(
+                          <tr key={i} className="border-t">
+                            <td className="py-2 pr-3">{r['Date']||''}</td>
+                            <td className="py-2 pr-3">{r['UserName']||''} ({r['User ID']||''})</td>
+                            <td className="py-2 pr-3">{r['Station']||''}</td>
+                            <td className="py-2 pr-3">{r['Total Hour']||''}</td>
+                            <td className="py-2 pr-3">{r['Total Unit']||''}</td>
+                            <td className="py-2 pr-3">{r['UPMH / TPMH']||''}</td>
+                            <td className="py-2 pr-3">{r['PERCENT']||''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+    
 
       ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
     </script>
