@@ -10,34 +10,42 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js"></script>
     <style>
       html,body,#root{height:100%}
       body{background:#f8fafc; color:#0f172a}
       .card{border:1px solid rgba(148,163,184,.25);border-radius:1rem;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-      .tile{border:1px solid rgba(148,163,184,.35);background:#fff;border-radius:.75rem;padding:14px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;justify-content:center;min-height:70px;transition:all .12s ease}
-      .tile:hover{box-shadow:0 2px 6px rgba(0,0,0,.06);transform:translateY(-1px)}
+      .tile{border:1px solid rgba(148,163,184,.35);background:#fff;border-radius:.75rem;padding:14px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;justify-content:center;min-height:80px;transition:box-shadow .15s,transform .2s;}
+      .tile:hover{box-shadow:0 2px 12px rgba(0,213,255,0.12);transform:scale(1.025) translateY(-2px)}
       .tile.drop{outline:2px dashed #38bdf8; outline-offset:2px; background:rgba(56,189,248,.06)}
       .tile.missing{background:linear-gradient(180deg,rgba(241,245,249,.7),rgba(255,255,255,1));}
       .pill{display:inline-flex;align-items:center;gap:.35rem;padding:.15rem .5rem;border-radius:999px;font-size:11px;border:1px solid rgba(148,163,184,.35);background:#fff;white-space:nowrap}
-      .avatar{width:24px;height:24px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:.7rem;color:white}
+      .avatar{width:24px;height:24px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:.7rem;color:white;transition:box-shadow .2s;}
       .floor1{--c:#0284c7;--bg:linear-gradient(90deg,rgba(14,165,233,.06),rgba(14,165,233,0))}
       .floor2{--c:#a16207;--bg:linear-gradient(90deg,rgba(234,179,8,.09),rgba(234,179,8,0))}
       .floor3{--c:#4f46e5;--bg:linear-gradient(90deg,rgba(99,102,241,.08),rgba(99,102,241,0))}
       .floorTitle{color:var(--c); font-weight:800}
       .sectionHead{padding:.5rem 1rem;border-radius:.75rem;background:var(--bg);border:1px dashed color-mix(in srgb, var(--c) 40%, transparent)}
       .tileTitle{font-weight:700}
-      .btn{padding:.5rem 1rem;border-radius:.7rem;border:1px solid rgba(148,163,184,.35);background:white;transition:all .2s ease;min-width:120px}
-      .btn:hover{background:#f8fafc; transform:translateY(-1px)}
+      .btn{padding:.5rem 1rem;border-radius:.7rem;border:1px solid rgba(148,163,184,.35);background:white;transition:all .2s cubic-bezier(.4,0,.2,1);min-width:120px}
+      .btn:hover{background:#f0f9ff; transform:scale(1.04);}
       .btn:disabled{opacity:.55; cursor:not-allowed; transform:none}
-      .btnP{background:#0ea5e9;border-color:#0ea5e9;color:white}
-      .btnP:hover{background:#0284c7; border-color:#0284c7}
-      .select{appearance:none;background:#fff url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2220%22 viewBox=%220 0 20 20%22 fill=%22none%22><path d=%22M5 7l5 6 5-6%22 stroke=%22%236b7280%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>') no-repeat right .6rem center/16px 16px;}
+      .btnP{background:linear-gradient(90deg,#0ea5e9 60%,#818cf8 100%);border-color:#0ea5e9;color:white;box-shadow:0 2px 8px 0 rgba(14,165,233,0.07);}
+      .btnP:hover{background:linear-gradient(90deg,#0284c7 60%,#6366f1 100%); border-color:#0284c7}
+      .select{appearance:none;background:#fff url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2220%22 viewBox=%220 0 20 20%22 fill=%22none%22><path d=%22M6 8l4 4 4-4%22 stroke=%22%23343a40%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>') no-repeat right .75rem center/1.3em 1.3em;border-radius:.5rem}
       .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
       .fab{position:fixed; right:16px; bottom:16px; z-index:50}
       .chatbox{position:fixed; right:16px; bottom:72px; width:360px; max-width:92vw; z-index:50}
+      .fadein {animation: fadein 0.5s;}
+      @keyframes fadein {from {opacity: 0; transform: scale(0.95);} to {opacity: 1; transform: scale(1);}}
+      /* Toast animation */
+      #toasts>div { transition: opacity .4s, transform .6s; }
+      /* Card hover effect */
+      .card { transition: box-shadow 0.3s, transform 0.2s;}
+      .card:hover { box-shadow: 0 4px 24px rgba(59,130,246,0.12),0 2px 4px rgba(0,0,0,0.04); transform:scale(1.01);}
     </style>
   </head>
-  <body class="bg-slate-50">
+  <body class="bg-gradient-to-br from-sky-100 via-teal-50 to-indigo-100 min-h-screen">
     <div id="root"></div>
 <script>
   try {
@@ -48,683 +56,504 @@
   } catch(e) {}
 </script>
 
-    <script>
-      // Force URL override to the latest Apps Script deployment
-      try{
-        const key='SHEETOPS_APPS_SCRIPT_URL';
-        const def='https://script.google.com/macros/s/AKfycbwvc4AxcUCFAyAevZsVzmQTAtiOU93qvgBFhJCEpK36rpewBFjacrJNxBzPbZGKeowdLA/exec';
-        const cur=localStorage.getItem(key);
-        if(!cur || !cur.includes('/macros/s/')) localStorage.setItem(key, def);
-      }catch(e){}
-    </script>
-    <div id="toasts" class="fixed top-3 right-3 space-y-2 z-[9999]"></div>
+<script>
+  // Force URL override to the latest Apps Script deployment
+  try{
+    const key='SHEETOPS_APPS_SCRIPT_URL';
+    const def='https://script.google.com/macros/s/AKfycbwvc4AxcUCFAyAevZsVzmQTAtiOU93qvgBFhJCEpK36rpewBFjacrJNxBzPbZGKeowdLA/exec';
+    const cur=localStorage.getItem(key);
+    if(!cur || !cur.includes('/macros/s/')) localStorage.setItem(key, def);
+  }catch(e){}
+</script>
+<div id="toasts" class="fixed top-3 right-3 space-y-2 z-[9999]"></div>
 
-    <!-- Firebase init (primary data store) -->
-    <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-      import { getDatabase, ref as dbRef, get, set, update, remove, child, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
-      import { getStorage, ref as stRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
-      const firebaseConfig = {
-        apiKey: "AIzaSyC6Qnfm0xiOsN_FZksKgGi_0i5wovGZ97E",
-        authDomain: "inventory-21fd3.firebaseapp.com",
-        databaseURL: "https://inventory-21fd3-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "inventory-21fd3",
-        storageBucket: "inventory-21fd3.firebasestorage.app",
-        messagingSenderId: "27307205860",
-        appId: "1:27307205860:web:8d5da549bc1a1a519238f1"
-      };
-      const app = initializeApp(firebaseConfig);
-      const db = getDatabase(app);
-      const storage = getStorage(app);
-      window.fb = { app, db, storage, dbApi:{ dbRef, get, set, update, remove, child, push, onValue }, stApi:{ stRef, uploadString, getDownloadURL } };
-    </script>
+<!-- Firebase init (primary data store) -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getDatabase, ref as dbRef, get, set, update, remove, child, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+  import { getStorage, ref as stRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyC6Qnfm0xiOsN_FZksKgGi_0i5wovGZ97E",
+    authDomain: "inventory-21fd3.firebaseapp.com",
+    databaseURL: "https://inventory-21fd3-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "inventory-21fd3",
+    storageBucket: "inventory-21fd3.appspot.com",
+    messagingSenderId: "27307205860",
+    appId: "1:27307205860:web:8d5da549bc1a1a519238f1"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const storage = getStorage(app);
+  window.fb = { app, db, storage, dbApi:{ dbRef, get, set, update, remove, child, push, onValue }, stApi:{ stRef, uploadString, getDownloadURL } };
+</script>
 
-    <script type="text/babel">
-      const {useState, useEffect, useMemo, useRef} = React;
+<script type="text/babel">
+const {useState, useEffect, useMemo, useRef} = React;
 
-      const DEFAULTS = {
-        SHEET_ID: '15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU',
-        API_KEY:  'AIzaSyDObfhk_-Rnz5UCzf3Kt_BSqbnK8QoZunk',
-        APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec'
-      };
+// --- Helper for Toasts ---
+function pushToast(msg, type='error'){
+  try{
+    const wrap = document.getElementById('toasts'); if(!wrap) return;
+    const node = document.createElement('div');
+    node.className = `fadein px-3 py-2 rounded-xl text-sm shadow border ${type==='error'?'bg-rose-50 border-rose-200 text-rose-800':'bg-emerald-50 border-emerald-200 text-emerald-800'}`;
+    node.textContent = msg; wrap.appendChild(node);
+    setTimeout(()=>{ node.style.opacity='0'; node.style.transform='translateY(-6px)'; }, 3200);
+    setTimeout(()=>{ try{wrap.removeChild(node)}catch{} }, 3600);
+  }catch{}
+}
+window.addEventListener('error', (e)=>{ pushToast('Uncaught: ' + (e?.message||'Unknown error')); });
+window.addEventListener('unhandledrejection', (e)=>{ pushToast('Async: ' + (e?.reason?.message||e?.reason||'Promise error')); });
 
-      const VIEW_ONLY = new URLSearchParams(location.search).get('mode') === 'view';
-      const STATIONS = {
-        'Floor 1': ['1101','1102','1103','1104','1105','1106','1107','1201','1203','1205'],
-        'Floor 2': ['2101','2102','2103','2104','2105','2201','2203','2205'],
-        'Floor 3': ['3101','3105','3201','3205']
-      };
+// --- Helper for Export as Excel ---
+function exportToExcel(data, fileName) {
+  try {
+    if (!data || data.length === 0) return pushToast("ไม่มีข้อมูลให้ Export");
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    XLSX.writeFile(wb, fileName);
+    pushToast('Export สำเร็จ', 'ok');
+  } catch (e) {
+    pushToast('Export Error: ' + (e?.message || e), 'error');
+  }
+}
 
-      function resolveConfig(){
-        const s = (k)=>localStorage.getItem(k)||'';
-        return {
-          SHEET_ID: s('SHEETOPS_SHEET_ID') || DEFAULTS.SHEET_ID,
-          API_KEY: s('SHEETOPS_API_KEY') || DEFAULTS.API_KEY,
-          APPS_SCRIPT_URL: s('SHEETOPS_APPS_SCRIPT_URL') || DEFAULTS.APPS_SCRIPT_URL,
-        };
+// --- Helper for Import Excel ---
+async function importUsersFromExcel(file, postScript, loadAll, pushToast) {
+  try {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const wsName = workbook.SheetNames[0];
+      const ws = workbook.Sheets[wsName];
+      const json = XLSX.utils.sheet_to_json(ws, { header: ["id", "name", "type"], range: 1 });
+      for (const u of json) {
+        if (u.id && u.name) {
+          await postScript({ action: 'append_user', user: { id: String(u.id).trim(), name: String(u.name).trim(), type: String(u.type || '').trim() } });
+        }
       }
+      pushToast('นำเข้ารายชื่อสำเร็จ', 'ok');
+      await loadAll();
+    };
+    reader.readAsArrayBuffer(file);
+  } catch (e) {
+    pushToast('Import Error: ' + (e?.message || e), 'error');
+  }
+}
 
-      function pushToast(msg, type='error'){
-        try{
-          const wrap = document.getElementById('toasts'); if(!wrap) return;
-          const node = document.createElement('div');
-          node.className = `px-3 py-2 rounded-xl text-sm shadow border ${type==='error'?'bg-rose-50 border-rose-200 text-rose-800':'bg-emerald-50 border-emerald-200 text-emerald-800'}`;
-          node.textContent = msg; wrap.appendChild(node);
-          setTimeout(()=>{ node.style.opacity='0'; node.style.transform='translateY(-6px)'; }, 3200);
-          setTimeout(()=>{ try{wrap.removeChild(node)}catch{} }, 3600);
-        }catch{}
+// ---- App Start ----
+
+const DEFAULTS = {
+  SHEET_ID: '15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU',
+  API_KEY:  'AIzaSyDObfhk_-Rnz5UCzf3Kt_BSqbnK8QoZunk',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwEAW_7ervyDdqtdmbqq_g05BILVKyY2jPK3UXhv1TutTk4wmcxNxUkxu6Xoa4ms0r4zQ/exec'
+};
+
+const VIEW_ONLY = new URLSearchParams(location.search).get('mode') === 'view';
+const STATIONS = {
+  'Floor 1': ['1101','1102','1103','1104','1105','1106','1107','1201','1203','1205'],
+  'Floor 2': ['2101','2102','2103','2104','2105','2201','2203','2205'],
+  'Floor 3': ['3101','3105','3201','3205']
+};
+
+function resolveConfig(){
+  const s = (k)=>localStorage.getItem(k)||'';
+  return {
+    SHEET_ID: s('SHEETOPS_SHEET_ID') || DEFAULTS.SHEET_ID,
+    API_KEY: s('SHEETOPS_API_KEY') || DEFAULTS.API_KEY,
+    APPS_SCRIPT_URL: s('SHEETOPS_APPS_SCRIPT_URL') || DEFAULTS.APPS_SCRIPT_URL,
+  };
+}
+
+// Firebase helpers
+const hasFb = () => !!(window.fb && window.fb.db && window.fb.dbApi && window.fb.stApi);
+const fbGet = async (path) => {
+  const {db, dbApi} = window.fb; const snap = await dbApi.get(dbApi.dbRef(db, path));
+  return snap.exists() ? snap.val() : null;
+};
+const fbSet = async (path, value) => { const {db, dbApi} = window.fb; return dbApi.set(dbApi.dbRef(db, path), value); };
+const fbRemove = async (path) => { const {db, dbApi} = window.fb; return dbApi.remove(dbApi.dbRef(db, path)); };
+const fbPushRef = (path) => { const {db, dbApi} = window.fb; return dbApi.push(dbApi.dbRef(db, path)); };
+
+const SHEET_USER='User', SHEET_PLAN='Plan', SHEET_ISSUE='ปัญหา';
+const DEFAULT_TYPES = ['Support','Case replen','Sorter','Picker','put to slot','Build','Tote'];
+const gsRange = (id, key, sheet, range) => `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(sheet+'!'+range)}?key=${key}`;
+const guessHeaderIndex=(headers,names)=>{
+  const lower=headers.map(h=>String(h||'').trim().toLowerCase());
+  for(const n of names){ const i=lower.indexOf(n.toLowerCase()); if(i>-1) return i; } return -1;
+};
+const colorFor = key => { const colors=['#0ea5e9','#06b6d4','#14b8a6','#22c55e','#a3e635','#eab308','#f59e0b','#ef4444','#6366f1','#8b5cf6','#ec4899','#f43f5e']; let hash=0; for(let i=0;i<key.length;i++)hash=key.charCodeAt(i)+((hash<<5)-hash); return colors[Math.abs(hash)%colors.length]; };
+
+// ... parseUsers, parseIssues, parsePlan, fetchValues, postScript, postFormData ... (เหมือนโค้ดเดิมที่แนบมา) ...
+
+function parseUsers(values){
+  if(!values?.length) return [];
+  const h=values[0], rows=values.slice(1);
+  const ixId=guessHeaderIndex(h,['id','รหัส']);
+  const ixName=guessHeaderIndex(h,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล']);
+  const ixRole=guessHeaderIndex(h,['role','หน้าที่']);
+  const ixType=guessHeaderIndex(h,['type','ประเภท','ชนิด']);
+  return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>({
+    id:   String(ixId>=0?r[ixId]:r[0]||'').trim(),
+    name: String(ixName>=0?r[ixName]:r[1]||'').trim(),
+    role: String(ixRole>=0?r[ixRole]:'').trim()||undefined,
+    type: String(ixType>=0?r[ixType]:'').trim()||undefined,
+  })).filter(u=>u.id && u.name);
+}
+function parseIssues(values){
+  if(!values?.length) return [];
+  const h = values[0], rows = values.slice(1);
+  const ix = (names)=>guessHeaderIndex(h,names);
+  const col = {
+    time: ix(['time','เวลา','timestamp','วันที่เวลา']),
+    employeeId: ix(['employeeid','employee id','user id','รหัส','id']),
+    employeeName: ix(['employeename','employee name','ชื่อ']),
+    taskId: ix(['taskid','station','สแตชัน','สถานี']),
+    message: ix(['message','ปัญหา','ข้อความ','รายละเอียด']),
+    images: ix(['images','รูป','รูปภาพ','urls'])
+  };
+  return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>{
+    const imgsRaw = String(col.images>=0?r[col.images]:'').trim();
+    const images = imgsRaw ? imgsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    return {
+      time: String(col.time>=0?r[col.time]:'').trim(),
+      employeeId: String(col.employeeId>=0?r[col.employeeId]:'').trim(),
+      employeeName: String(col.employeeName>=0?r[col.employeeName]:'').trim(),
+      taskId: String(col.taskId>=0?r[col.taskId]:'').trim(),
+      message: String(col.message>=0?r[col.message]:'').trim(),
+      images
+    };
+  });
+}
+function parsePlan(values){
+  if(!values?.length) return [];
+  const h=values[0], rows=values.slice(1);
+  const ixStation=guessHeaderIndex(h,['taskid','task id','station','สแตชัน','สถานี','สเตชัน']);
+  const ixType=guessHeaderIndex(h,['type','ประเภท']);
+  const ixStatus=guessHeaderIndex(h,['status','สถานะ']);
+  const ixAssigned=guessHeaderIndex(h,['assignedto','assigned','พนักงาน','รหัส','ผู้รับผิดชอบ']);
+  return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>{
+    const station=String(ixStation>=0?r[ixStation]:r[0]||'').trim();
+    const assignedRaw = String(ixAssigned>=0?r[ixAssigned]:'').trim();
+    const list = assignedRaw ? assignedRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    return {
+      id: station || Math.random().toString(36).slice(2),
+      station,
+      type: String(ixType>=0?r[ixType]:'').trim()||undefined,
+      status:String(ixStatus>=0?r[ixStatus]:'').trim()||undefined,
+      assignedList: list,
+    };
+  });
+}
+
+async function fetchValues(cfg, sheet, range){
+  try{
+    const r = await fetch(gsRange(cfg.SHEET_ID,cfg.API_KEY,sheet,range));
+    const t = await r.text(); let j=null; try{ j = JSON.parse(t); }catch{}
+    if(!r.ok) throw new Error('Sheets API '+r.status+': '+t.slice(0,120));
+    return j?.values || [];
+  }catch(e){
+    try{
+      const u = new URL(cfg.APPS_SCRIPT_URL);
+      u.searchParams.set('action','get_values');
+      u.searchParams.set('sheet',sheet);
+      u.searchParams.set('range',range);
+      const r2 = await fetch(u.toString());
+      const t2 = await r2.text(); let j2=null; try{ j2 = JSON.parse(t2); }catch{}
+      if(j2?.ok) return j2.values || [];
+    }catch(e2){}
+    pushToast('โหลดข้อมูลไม่สำเร็จ (Sheets/API)'); throw e;
+  }
+}
+async function postScript(cfg, payload){
+  try{ // JSON
+    const r = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const text = await r.text(); let j=null; try{ j=JSON.parse(text); }catch{}
+    if(!r.ok) throw new Error('POST JSON '+r.status+': '+text.slice(0,120));
+    return j || {ok:true};
+  }catch(e1){
+    try{ // form
+      const form = new URLSearchParams({ payload: JSON.stringify(payload) });
+      const r2 = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: form.toString() });
+      const t2 = await r2.text(); let j2=null; try{ j2=JSON.parse(t2); }catch{}
+      if(!r2.ok) throw new Error('POST form '+r2.status+': '+t2.slice(0,120));
+      return j2 || {ok:true};
+    }catch(e2){
+      try{ // GET beacon
+        const u = new URL(cfg.APPS_SCRIPT_URL);
+        if (payload.action) u.searchParams.set('action', payload.action);
+        Object.keys(payload).forEach(k => { if (k==='action') return; const v=payload[k]; if (v===undefined||v===null) return; if (typeof v==='object') u.searchParams.set(k, JSON.stringify(v)); else u.searchParams.set(k, v); });
+        await new Promise((resolve) => { const img = new Image(); img.onload=()=>resolve(true); img.onerror=()=>resolve(true); img.src=u.toString(); });
+        return { ok:true, via:'img-get' };
+      }catch(e3){ throw e1; }
+    }
+  }
+}
+
+// --- Main App ---
+function App(){
+  const [cfg] = useState(resolveConfig());
+  const [page,setPage] = useState('plan'); // 'plan' | 'issues'
+  const [users,setUsers] = useState([]);
+  const [tasks,setTasks] = useState([]);
+  const [issues,setIssues] = useState([]);
+  const [search,setSearch] = useState('');
+  const [typeFilter,setTypeFilter] = useState('All');
+  const [adding,setAdding] = useState(false);
+  const [newUser,setNewUser] = useState({id:'',name:'',type:''});
+  const [err,setErr] = useState(null);
+  const [loading,setLoading] = useState(false);
+  const [assignStation,setAssignStation] = useState(null);
+  const [assignQuery,setAssignQuery] = useState('');
+  const [assignSel,setAssignSel] = useState(new Set());
+  const [importing,setImporting] = useState(false);
+
+  // Load data
+  const loadAll = async () => {
+    setLoading(true);
+    try{
+      if (hasFb()){
+        const data = await Promise.all([
+          fbGet('/User'),
+          fbGet('/Plan')
+        ]);
+        const [uMap, pMap] = data;
+        const uList = Object.values(uMap||{});
+        const pList = Object.values(pMap||{});
+        setUsers(uList);
+        setTasks(pList);
+      }else{
+        const [u, p] = await Promise.all([
+          fetchValues(cfg, 'User', 'B1:F'),
+          fetchValues(cfg, 'Plan', 'A1:Z')
+        ]);
+        setUsers(parseUsers(u));
+        setTasks(parsePlan(p));
       }
-      window.addEventListener('error', (e)=>{ pushToast('Uncaught: ' + (e?.message||'Unknown error')); });
-      window.addEventListener('unhandledrejection', (e)=>{ pushToast('Async: ' + (e?.reason?.message||e?.reason||'Promise error')); });
-
-      // Firebase helpers
-      const hasFb = () => !!(window.fb && window.fb.db && window.fb.dbApi && window.fb.stApi);
-      const fbGet = async (path) => {
-        const {db, dbApi} = window.fb; const snap = await dbApi.get(dbApi.dbRef(db, path));
-        return snap.exists() ? snap.val() : null;
-      };
-      const fbSet = async (path, value) => { const {db, dbApi} = window.fb; return dbApi.set(dbApi.dbRef(db, path), value); };
-      const fbUpdate = async (updates) => { const {db, dbApi} = window.fb; return dbApi.update(dbApi.dbRef(db, '/'), updates); };
-      const fbRemove = async (path) => { const {db, dbApi} = window.fb; return dbApi.remove(dbApi.dbRef(db, path)); };
-      const fbPushRef = (path) => { const {db, dbApi} = window.fb; return dbApi.push(dbApi.dbRef(db, path)); };
-
-      const SHEET_USER='User', SHEET_PLAN='Plan', SHEET_ISSUE='ปัญหา';
-      const DEFAULT_TYPES = ['Support','Case replen','Sorter','Picker','put to slot','Build','Tote'];
-      const gsRange = (id, key, sheet, range) => `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(sheet+'!'+range)}?key=${key}`;
-      const guessHeaderIndex=(headers,names)=>{
-        const lower=headers.map(h=>String(h||'').trim().toLowerCase());
-        for(const n of names){ const i=lower.indexOf(n.toLowerCase()); if(i>-1) return i; } return -1;
-      };
-      const colorFor = key => { const colors=['#0ea5e9','#06b6d4','#14b8a6','#22c55e','#a3e635','#eab308','#f59e0b','#ef4444','#6366f1','#8b5cf6','#ec4899','#f43f5e']; let hash=0; for(let i=0;i<key.length;i++) hash=(hash*31+key.charCodeAt(i))>>>0; return colors[hash%colors.length]; };
-
-      function parseUsers(values){
-        if(!values?.length) return [];
-        const h=values[0], rows=values.slice(1);
-        const ixId=guessHeaderIndex(h,['id','รหัส']);
-        const ixName=guessHeaderIndex(h,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล']);
-        const ixRole=guessHeaderIndex(h,['role','หน้าที่']);
-        const ixType=guessHeaderIndex(h,['type','ประเภท','ชนิด']);
-        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>({
-          id:   String(ixId>=0?r[ixId]:r[0]||'').trim(),
-          name: String(ixName>=0?r[ixName]:r[1]||'').trim(),
-          role: String(ixRole>=0?r[ixRole]:'').trim()||undefined,
-          type: String(ixType>=0?r[ixType]:'').trim()||undefined,
-        })).filter(u=>u.id && u.name);
+      setErr(null);
+    }catch(e){ setErr('Failed to fetch'); }
+    finally{ setLoading(false); }
+  };
+  const loadIssues = async () => {
+    try{
+      if (hasFb()){
+        const map = await fbGet('/Issues');
+        const list = Object.values(map||{});
+        setIssues(list.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||''))));
+        return;
       }
+    }catch(e){ /* fallback below */ }
+    try{
+      const r = await postScript(cfg, {action:'list_issues'});
+      if (r && r.ok && Array.isArray(r.items)) { setIssues(r.items); return; }
+    }catch(e){ /* fallback below */ }
+    // Fallback: read from Google Sheet directly (try both names: ปัญหา and ปัญญา)
+    try{
+      let vals = await fetchValues(cfg, SHEET_ISSUE, 'A1:Z');
+      if (!vals || !vals.length) {
+        vals = await fetchValues(cfg, 'ปัญญา', 'A1:Z');
+      }
+      if (vals && vals.length) setIssues(parseIssues(vals));
+    }catch(e2){ pushToast('โหลดปัญหาไม่สำเร็จ: ' + (e2?.message||e2)); }
+  };
+  useEffect(()=>{ loadAll(); loadIssues(); }, [cfg.SHEET_ID, cfg.API_KEY]);
+  // Realtime subscriptions when using Firebase
+  useEffect(()=>{
+    if (!hasFb()) return;
+    const {db, dbApi} = window.fb;
+    const unsubs = [];
+    unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/User'), snap => { const v=snap.val()||{}; setUsers(Object.values(v)); }));
+    unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/Plan'), snap => { const v=snap.val()||{}; setTasks(Object.values(v)); }));
+    unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/Issues'), snap => { const v=snap.val()||{}; const list=Object.values(v); list.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||''))); setIssues(list); }));
+    return () => { unsubs.forEach(u=>{ try{ u(); }catch{} }); };
+  }, [cfg.SHEET_ID, cfg.API_KEY]);
 
-      function parseIssues(values){
-        if(!values?.length) return [];
-        const h = values[0], rows = values.slice(1);
-        const ix = (names)=>guessHeaderIndex(h,names);
-        const col = {
-          time: ix(['time','เวลา','timestamp','วันที่เวลา']),
-          employeeId: ix(['employeeid','employee id','user id','รหัส','id']),
-          employeeName: ix(['employeename','employee name','ชื่อ']),
-          taskId: ix(['taskid','station','สแตชัน','สถานี']),
-          message: ix(['message','ปัญหา','ข้อความ','รายละเอียด']),
-          images: ix(['images','รูป','รูปภาพ','urls'])
-        };
-        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>{
-          const imgsRaw = String(col.images>=0?r[col.images]:'').trim();
-          const images = imgsRaw ? imgsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-          return {
-            time: String(col.time>=0?r[col.time]:'').trim(),
-            employeeId: String(col.employeeId>=0?r[col.employeeId]:'').trim(),
-            employeeName: String(col.employeeName>=0?r[col.employeeName]:'').trim(),
-            taskId: String(col.taskId>=0?r[col.taskId]:'').trim(),
-            message: String(col.message>=0?r[col.message]:'').trim(),
-            images
-          };
+  async function writePlan(station, list){
+    const payload = { id:String(station), station:String(station), assignedList:Array.from(new Set(list||[])), updatedAt: new Date().toISOString() };
+    try{
+      if (hasFb()){
+        await fbSet('/Plan/'+String(station), payload);
+        setTasks(ts=>{
+          const map = new Map(ts.map(t=>[String(t.station), {...t}]));
+          map.set(String(station), payload);
+          return Array.from(map.values());
         });
+        return true;
       }
-      function parsePlan(values){
-        if(!values?.length) return [];
-        const h=values[0], rows=values.slice(1);
-        const ixStation=guessHeaderIndex(h,['taskid','task id','station','สแตชัน','สถานี','สเตชัน']);
-        const ixType=guessHeaderIndex(h,['type','ประเภท']);
-        const ixStatus=guessHeaderIndex(h,['status','สถานะ']);
-        const ixAssigned=guessHeaderIndex(h,['assignedto','assigned','พนักงาน','รหัส','ผู้รับผิดชอบ']);
-        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>{
-          const station=String(ixStation>=0?r[ixStation]:r[0]||'').trim();
-          const assignedRaw = String(ixAssigned>=0?r[ixAssigned]:'').trim();
-          const list = assignedRaw ? assignedRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-          return {
-            id: station || Math.random().toString(36).slice(2),
-            station,
-            type: String(ixType>=0?r[ixType]:'').trim()||undefined,
-            status:String(ixStatus>=0?r[ixStatus]:'').trim()||undefined,
-            assignedList: list,
-          };
-        });
+    }catch(e){ /* fallback below */ }
+    try{
+      await postScript(cfg,{ action:'set_assignees', taskId: String(station), employeeIds: payload.assignedList });
+      return true;
+    }catch{ pushToast('บันทึกไม่สำเร็จ'); return false; }
+  }
+
+  const userMap = useMemo(()=>Object.fromEntries(users.map(u=>[u.id,u])),[users]);
+  const taskByStation = useMemo(()=>{ const m = new Map(); tasks.forEach(t => m.set(String(t.station), t)); return m; }, [tasks]);
+
+  const sheetTypes = useMemo(()=>{
+    const raw = users.map(u=>String(u.type||'').trim()).filter(Boolean);
+    const map = new Map();
+    for (const t of raw) { const k=t.toLowerCase(); if(!map.has(k)) map.set(k,t); }
+    return Array.from(map.values()).sort((a,b)=>a.localeCompare(b,'th'));
+  }, [users]);
+  const filteredUsers = useMemo(()=>{ const q=search.toLowerCase(); return users.filter(u => (typeFilter==='All' || u.type===typeFilter) && (u.name+u.id).toLowerCase().includes(q)); }, [users, search, typeFilter]);
+
+  async function addUser(){
+    if(VIEW_ONLY) return alert('View-only mode');
+    const {id,name,type} = newUser;
+    if(!String(id).trim() || !String(name).trim()) { pushToast('กรุณากรอก ID และ ชื่อ-สกุล'); return; }
+    try{
+      if (hasFb()){
+        await fbSet('/User/'+String(id).trim(), { id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim() });
+      }else{
+        const resp = await postScript(cfg,{action:'append_user', user:{id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim()}});
+        if(!resp || resp.ok===false){ throw new Error(resp && resp.error ? resp.error : 'Apps Script rejected'); }
       }
+      setNewUser({id:'',name:'',type:''});
+      setAdding(false);
+      await loadAll();
+      pushToast('เพิ่มพนักงานเรียบร้อย','ok');
+    }catch(e){ pushToast('เพิ่มพนักงานไม่สำเร็จ: '+(e?.message||e)); }
+  }
+  function onSubmitAdd(e){ e.preventDefault(); addUser(); }
 
-      function parseKPI(values){
-        if(!values?.length) return [];
-        const h = values[0], rows = values.slice(1);
-        const ix = (names)=>guessHeaderIndex(h,names);
-        const col = {
-          date: ix(['date','วันที่']),
-          userId: ix(['user id','userid','uid']),
-          userName: ix(['username','user name','ชื่อ']),
-          station: ix(['station','สแตชัน','สถานี']),
-          func: ix(['function','ฟังก์ชัน','หน้าที่']),
-          totalHour: ix(['total hour']),
-          totalUnit: ix(['total unit']),
-          upmh: ix(['upmh / tpmh','upmh','tpmh']),
-          percent: ix(['percent','%'])
-        };
-        return rows.filter(r=>r.some(x=>String(x||'').trim()!=='')).map(r=>({
-          Date: String(col.date>=0?r[col.date]:'').trim(),
-          'User ID': String(col.userId>=0?r[col.userId]:'').trim(),
-          UserName: String(col.userName>=0?r[col.userName]:'').trim(),
-          Station: String(col.station>=0?r[col.station]:'').trim(),
-          Function: String(col.func>=0?r[col.func]:'').trim(),
-          'Total Hour': String(col.totalHour>=0?r[col.totalHour]:'').trim(),
-          'Total Unit': String(col.totalUnit>=0?r[col.totalUnit]:'').trim(),
-          'UPMH / TPMH': String(col.upmh>=0?r[col.upmh]:'').trim(),
-          PERCENT: String(col.percent>=0?r[col.percent]:'').trim()
-        }));
+  async function deleteUser(id){
+    if(VIEW_ONLY) return alert('View-only mode');
+    if(!confirm('แน่ใจว่าต้องการลบพนักงาน ID '+id+' ?')) return;
+    try{
+      if (hasFb()){
+        await fbRemove('/User/'+String(id));
+      }else{
+        let r = await postScript(cfg,{action:'delete_user', employeeId: String(id)});
+        if(!r || r.ok===false){ try{ r = await postScript(cfg,{action:'delete_user_row', employeeId: String(id)}); }catch{} }
+        if(!r || r.ok===false) throw new Error('Apps Script rejected');
       }
+        setUsers(us => us.filter(u => u.id !== id));
+        setTasks(ts => ts.map(t => ({...t, assignedList:(t.assignedList||[]).filter(eid => eid !== id)})));
+        pushToast('ลบพนักงานสำเร็จ','ok');
+    }catch(e){ pushToast('ลบพนักงานไม่สำเร็จ: '+(e?.message||e)); }
+  }
 
-      async function fetchValues(cfg, sheet, range){
-        try{
-          const r = await fetch(gsRange(cfg.SHEET_ID,cfg.API_KEY,sheet,range));
-          const t = await r.text(); let j=null; try{ j = JSON.parse(t); }catch{}
-          if(!r.ok) throw new Error('Sheets API '+r.status+': '+t.slice(0,120));
-          return j?.values || [];
-        }catch(e){
-          try{
-            const u = new URL(cfg.APPS_SCRIPT_URL);
-            u.searchParams.set('action','get_values');
-            u.searchParams.set('sheet',sheet);
-            u.searchParams.set('range',range);
-            const r2 = await fetch(u.toString());
-            const t2 = await r2.text(); let j2=null; try{ j2 = JSON.parse(t2); }catch{}
-            if(j2?.ok) return j2.values || [];
-          }catch(e2){}
-          pushToast('โหลดข้อมูลไม่สำเร็จ (Sheets/API)'); throw e;
-        }
-      }
-      async function postScript(cfg, payload){
-        try{ // JSON
-          const r = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-          const text = await r.text(); let j=null; try{ j=JSON.parse(text); }catch{}
-          if(!r.ok) throw new Error('POST JSON '+r.status+': '+text.slice(0,120));
-          return j || {ok:true};
-        }catch(e1){
-          try{ // form
-            const form = new URLSearchParams({ payload: JSON.stringify(payload) });
-            const r2 = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: form.toString() });
-            const t2 = await r2.text(); let j2=null; try{ j2=JSON.parse(t2); }catch{}
-            if(!r2.ok) throw new Error('POST form '+r2.status+': '+t2.slice(0,120));
-            return j2 || {ok:true};
-          }catch(e2){
-            try{ // GET beacon
-              const u = new URL(cfg.APPS_SCRIPT_URL);
-              if (payload.action) u.searchParams.set('action', payload.action);
-              Object.keys(payload).forEach(k => { if (k==='action') return; const v=payload[k]; if (v===undefined||v===null) return; if (typeof v==='object') u.searchParams.set(k, JSON.stringify(v)); else u.searchParams.set(k, String(v)); });
-              await new Promise((resolve) => { const img = new Image(); img.onload=()=>resolve(true); img.onerror=()=>resolve(true); img.src=u.toString(); });
-              return { ok:true, via:'img-get' };
-            }catch(e3){ throw e1; }
-          }
-        }
-      }
-      async function postFormData(cfg, formData){
-        const r = await fetch(cfg.APPS_SCRIPT_URL, { method:'POST', body: formData });
-        const t = await r.text(); let j=null; try{ j = JSON.parse(t); }catch{}
-        if(!r.ok) throw new Error('POST multipart '+r.status+': '+t.slice(0,120));
-        return j || {ok:true};
-      }
+  const TypeSelect = ({value,onChange,withAll=false}) => {
+    const uniq = sheetTypes;
+    return (
+      <select className="select w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={value} onChange={e=>onChange(e.target.value)}>
+        {withAll && <option value="All">All</option>}
+        {[...new Set([...DEFAULT_TYPES, ...uniq])].map(t => <option key={t} value={t}>{t}</option>)}
+      </select>
+    );
+  };
 
-      function App(){
-        const [cfg] = useState(resolveConfig());
-        const [page,setPage] = useState('plan'); // 'plan' | 'issues'
-        const [users,setUsers] = useState([]);
-        const [tasks,setTasks] = useState([]);
-        const [issues,setIssues] = useState([]);
-        const [search,setSearch] = useState('');
-        const [typeFilter,setTypeFilter] = useState('All');
-        const [adding,setAdding] = useState(false);
-        const [newUser,setNewUser] = useState({id:'',name:'',type:''});
-        const [err,setErr] = useState(null);
-        const [loading,setLoading] = useState(false);
-        const [assignStation,setAssignStation] = useState(null);
-        const [assignQuery,setAssignQuery] = useState('');
-        const [assignSel,setAssignSel] = useState(new Set());
+  // --- Import Employees Excel ---
+  function EmployeeImportModal() {
+    return (
+      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
+        <div className="card w-[400px] max-w-[95vw] p-6 fadein">
+          <div className="text-lg font-bold text-indigo-700 mb-2">
+            นำเข้ารายชื่อพนักงาน (Excel)
+          </div>
+          <div className="mb-2 text-sm text-slate-600">ไฟล์ต้องมี 3 คอลัมน์: <b>ID, ชื่อนามสกุล, TYPE</b> (แถวแรกต้องเป็น header)</div>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            className="mb-4 block"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) {
+                importUsersFromExcel(file, (payload) => postScript(cfg, payload), loadAll, pushToast);
+                setImporting(false);
+              }
+            }}
+          />
+          <button className="btn mr-2" onClick={()=>setImporting(false)}>ยกเลิก</button>
+        </div>
+      </div>
+    );
+  }
 
-        const loadAll = async () => {
-          setLoading(true);
-          try{
-            if (hasFb()){
-              const data = await Promise.all([
-                fbGet('/User'),
-                fbGet('/Plan')
-              ]);
-              const [uMap, pMap] = data;
-              const uList = Object.values(uMap||{});
-              const pList = Object.values(pMap||{});
-              setUsers(uList);
-              setTasks(pList);
-            }else{
-              const [u, p] = await Promise.all([
-                fetchValues(cfg, 'User', 'B1:F'),
-                fetchValues(cfg, 'Plan', 'A1:Z')
-              ]);
-              setUsers(parseUsers(u));
-              setTasks(parsePlan(p));
-            }
-            setErr(null);
-          }catch(e){ setErr('Failed to fetch'); }
-          finally{ setLoading(false); }
-        };
-        const loadIssues = async () => {
-          try{
-            if (hasFb()){
-              const map = await fbGet('/Issues');
-              const list = Object.values(map||{});
-              setIssues(list.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||''))));
-              return;
-            }
-          }catch(e){ /* fallback below */ }
-          try{
-            const r = await postScript(cfg, {action:'list_issues'});
-            if (r && r.ok && Array.isArray(r.items)) { setIssues(r.items); return; }
-          }catch(e){ /* fallback below */ }
-          // Fallback: read from Google Sheet directly (try both names: ปัญหา and ปัญญา)
-          try{
-            let vals = await fetchValues(cfg, SHEET_ISSUE, 'A1:Z');
-            if (!vals || !vals.length) {
-              vals = await fetchValues(cfg, 'ปัญญา', 'A1:Z');
-            }
-            if (vals && vals.length) setIssues(parseIssues(vals));
-          }catch(e2){ pushToast('โหลดปัญหาไม่สำเร็จ: ' + (e2?.message||e2)); }
-        };
-        useEffect(()=>{ loadAll(); loadIssues(); }, [cfg.SHEET_ID, cfg.API_KEY]);
-        // Realtime subscriptions when using Firebase
-        useEffect(()=>{
-          if (!hasFb()) return;
-          const {db, dbApi} = window.fb;
-          const unsubs = [];
-          unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/User'), snap => { const v=snap.val()||{}; setUsers(Object.values(v)); }));
-          unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/Plan'), snap => { const v=snap.val()||{}; setTasks(Object.values(v)); }));
-          unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/Issues'), snap => { const v=snap.val()||{}; const list=Object.values(v); list.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||''))); setIssues(list); }));
-          return () => { unsubs.forEach(u=>{ try{ u(); }catch{} }); };
-        }, [cfg.SHEET_ID, cfg.API_KEY]);
-
-        async function writePlan(station, list){
-          const payload = { id:String(station), station:String(station), assignedList:Array.from(new Set(list||[])), updatedAt: new Date().toISOString() };
-          try{
-            if (hasFb()){
-              await fbSet('/Plan/'+String(station), payload);
-              setTasks(ts=>{
-                const map = new Map(ts.map(t=>[String(t.station), {...t}]));
-                map.set(String(station), payload);
-                return Array.from(map.values());
-              });
-              return true;
-            }
-          }catch(e){ /* fallback below */ }
-          try{
-            await postScript(cfg,{ action:'set_assignees', taskId: String(station), employeeIds: payload.assignedList });
-            return true;
-          }catch{ pushToast('บันทึกไม่สำเร็จ'); return false; }
-        }
-
-
-        const userMap = useMemo(()=>Object.fromEntries(users.map(u=>[u.id,u])),[users]);
-        const taskByStation = useMemo(()=>{ const m = new Map(); tasks.forEach(t => m.set(String(t.station), t)); return m; }, [tasks]);
-
-        const sheetTypes = useMemo(()=>{
-          const raw = users.map(u=>String(u.type||'').trim()).filter(Boolean);
-          const map = new Map();
-          for (const t of raw) { const k=t.toLowerCase(); if(!map.has(k)) map.set(k,t); }
-          return Array.from(map.values()).sort((a,b)=>a.localeCompare(b,'th'));
-        }, [users]);
-        const filteredUsers = useMemo(()=>{ const q=search.toLowerCase(); return users.filter(u => (typeFilter==='All' || u.type===typeFilter) && (u.name+u.id).toLowerCase().includes(q)); }, [users, search, typeFilter]);
-
-        async function saveAssignees(station, list, status){
-          let ok=false;
-          try{ const r=await postScript(cfg,{ action:'set_assignees', taskId: station, employeeIds: list, status }); ok = !!(r && (r.ok!==false)); }catch{}
-          if(!ok){
-            try{ await postScript(cfg,{ action:'update_status', taskId: station, employeeId: list.join(','), status }); ok = true; }catch(e){ pushToast('บันทึกผู้รับผิดชอบไม่สำเร็จ: '+(e?.message||e)); }
-          }
-        }
-
-        const onDragStartEmp = (e, emp) => { e.dataTransfer.setData('text/plain', JSON.stringify(emp)); e.dataTransfer.effectAllowed = 'move'; };
-        const onDropTile = async (e, station) => {
-          e.preventDefault(); if(VIEW_ONLY) return alert('View-only mode');
-          let emp=null; try{ emp = JSON.parse(e.dataTransfer.getData('text/plain')||''); }catch{}
-          if(!emp?.id) return;
-          let newList=[];
-          setTasks(ts => { const copy = ts.map(t => ({...t, assignedList:[...(t.assignedList||[])]}));
-            copy.forEach(t => { const idx = (t.assignedList||[]).indexOf(emp.id); if(idx>-1) t.assignedList.splice(idx,1); });
-            let tgt = copy.find(t => t.station===station); if(!tgt) { tgt={station, id:station, assignedList:[]}; copy.push(tgt); }
-            if(!tgt.assignedList.includes(emp.id)) tgt.assignedList.push(emp.id);
-            newList = [...tgt.assignedList];
-            return copy; });
-          await writePlan(station, newList);
-          pushToast(`มอบหมาย ${emp.name} → ${station}`,'ok');
-        };
-
-        // Remove auto-assign per requirement
-
-        async function clearFloor(floor){
-          if(VIEW_ONLY) return alert('View-only mode');
-          const stations = STATIONS[floor] || [];
-          const newTasks = tasks.map(t => ({...t, assignedList: stations.includes(String(t.station)) ? [] : (t.assignedList||[]) }));
-          setTasks(newTasks);
-          for (const st of stations){ await writePlan(st, []); }
-          pushToast('ล้างคนออกจาก '+floor,'ok');
-        }
-        async function clearAll(){
-          await clearFloor('Floor 1'); await clearFloor('Floor 2'); await clearFloor('Floor 3');
-        }
-
-        async function addUser(){
-          if(VIEW_ONLY) return alert('View-only mode');
-          const {id,name,type} = newUser;
-          if(!String(id).trim() || !String(name).trim()) { pushToast('กรุณากรอก ID และ ชื่อ-สกุล'); return; }
-          try{
-            if (hasFb()){
-              await fbSet('/User/'+String(id).trim(), { id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim() });
-            }else{
-              const resp = await postScript(cfg,{action:'append_user', user:{id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim()}});
-              if(!resp || resp.ok===false){ throw new Error(resp && resp.error ? resp.error : 'Apps Script rejected'); }
-            }
-            setNewUser({id:'',name:'',type:''});
-            setAdding(false);
-            await loadAll();
-            pushToast('เพิ่มพนักงานเรียบร้อย','ok');
-          }catch(e){ pushToast('เพิ่มพนักงานไม่สำเร็จ: '+(e?.message||e)); }
-        }
-        function onSubmitAdd(e){ e.preventDefault(); addUser(); }
-
-        async function deleteUser(id){
-          if(VIEW_ONLY) return alert('View-only mode');
-          if(!confirm('แน่ใจว่าต้องการลบพนักงาน ID '+id+' ?')) return;
-          try{
-            if (hasFb()){
-              await fbRemove('/User/'+String(id));
-            }else{
-              let r = await postScript(cfg,{action:'delete_user', employeeId: String(id)});
-              if(!r || r.ok===false){ try{ r = await postScript(cfg,{action:'delete_user_row', employeeId: String(id)}); }catch{} }
-              if(!r || r.ok===false) throw new Error('Apps Script rejected');
-            }
-              setUsers(us => us.filter(u => u.id !== id));
-              setTasks(ts => ts.map(t => ({...t, assignedList:(t.assignedList||[]).filter(eid => eid !== id)})));
-              pushToast('ลบพนักงานสำเร็จ','ok');
-          }catch(e){ pushToast('ลบพนักงานไม่สำเร็จ: '+(e?.message||e)); }
-        }
-
-        const TypeSelect = ({value,onChange,withAll=false}) => {
-          const uniq = sheetTypes;
-          return (
-            <select className="select w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={value} onChange={e=>onChange(e.target.value)}>
-              {withAll && <option value="All">All</option>}
-              {[...new Set([...DEFAULT_TYPES, ...uniq])].map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          );
-        };
-
-        const Tile = ({station}) => { const t = taskByStation.get(station) || {station, assignedList:[]}; const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean); const missing = !taskByStation.get(station);
-          return (<div className={`tile ${missing?'missing':''}`} onDragOver={(e)=>{e.preventDefault(); e.currentTarget.classList.add('drop');}} onDragLeave={(e)=>{e.currentTarget.classList.remove('drop');}} onDrop={(e)=>{ e.currentTarget.classList.remove('drop'); onDropTile(e, station);}} title={station}>
-            <div className="flex items-center gap-2 w-full justify-between"><div className="tileTitle flex items-center gap-2">{station}</div>{t.type && <span className="pill text-slate-600">{t.type}</span>}</div>
-            {assigned.length>0 ? (
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {assigned.slice(0,6).map(a => (
-                  <span key={a.id} className="flex items-center gap-1">
-                    <span className="avatar" style={{background:colorFor(a.id)}}>{(a.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
-                    <span className="text-xs text-slate-700">{a.name}{a?.type ? ' ('+a.type+')' : ''}</span>
-                  </span>
-                ))}
-                {assigned.length>6 && <span className="text-xs text-slate-500">+{assigned.length-6}</span>}
-              </div>
-            ) : (
-              <button className="pill hover:shadow" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>คลิกเพื่อเลือกพนักงาน</button>
+  // --- Main Render ---
+  return (
+    <div className="min-h-screen">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+          <button className="text-xl md:text-2xl font-bold hover:text-sky-600 transition-all duration-200 animate-pulse"
+            onClick={()=>setPage('plan')}>KKRDC PITL</button>
+          <div className="ml-6 flex items-center gap-2">
+            <button className={`btn ${page==='plan'?'btnP text-white border-sky-500':''}`} onClick={()=>setPage('plan')}>แผนผัง</button>
+            <button className={`btn ${page==='issues'?'btnP text-white border-sky-500':''}`} onClick={()=>{ setPage('issues'); setTimeout(()=>loadIssues(), 50); }}>ปัญหา</button>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {!VIEW_ONLY && page==='plan' && (
+              <>
+                <button onClick={()=>exportToExcel(users, "users.xlsx")} className="btn bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-sm hover:scale-105 animate-bounce">Export รายชื่อ</button>
+                <button onClick={()=>exportToExcel(tasks, "assignments.xlsx")} className="btn bg-gradient-to-r from-green-400 to-cyan-400 text-white shadow-sm hover:scale-105 animate-bounce">Export การมอบหมาย</button>
+                <button onClick={()=>setImporting(true)} className="btn bg-indigo-500 text-white hover:bg-indigo-700 cursor-pointer transition-all duration-200">Import รายชื่อ (Excel)</button>
+                <button onClick={async()=>{ await clearAll(); }} className="btn">🧹 ล้างทั้งหมด</button>
+                <button onClick={()=>setAdding(true)} className="btn">+ เพิ่มพนักงาน</button>
+              </>
             )}
-            <div className="mt-2">
-              <button className="text-xs underline text-sky-600" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>แก้ไขพนักงาน</button>
-            </div>
-          </div>);
-        };
-
-        function IssuesPage(){
-          const [form, setForm] = useState({message:''});
-          const [files, setFiles] = useState([]);
-          const [selectedKey, setSelectedKey] = useState(null);
-          const [chatText, setChatText] = useState('');
-          const [sortOrder, setSortOrder] = useState('desc'); // 'desc' newest→oldest, 'asc' oldest→newest
-          useEffect(()=>{ if(!issues?.length) loadIssues(); }, []);
-          const onFiles = (e)=>{ setFiles(Array.from(e.target.files||[]).slice(0,4)); };
-
-          const getIssueKey = (it, i) => String(it.id || `${it.time||''}|${(it.taskId||'')}` || i);
-          const loadLocalChat = (key)=>{
-            try{ const j = JSON.parse(localStorage.getItem('issue_chat_'+key)||'[]'); return Array.isArray(j)?j:[]; }catch{return []}
-          };
-          const saveLocalChat = (key, arr)=>{ try{ localStorage.setItem('issue_chat_'+key, JSON.stringify(arr||[])); }catch{} };
-
-          async function submitIssue(e){
-            e.preventDefault();
-            if(!form.message.trim()) return pushToast('กรุณากรอกข้อความปัญหา');
-            try{
-              const filesPayload = [];
-              for (const f of files) {
-                const data = await new Promise((resolve, reject)=>{
-                  const fr = new FileReader();
-                  fr.onload = () => resolve(String(fr.result||'').split(',').pop());
-                  fr.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'));
-                  fr.readAsDataURL(f);
-                });
-                filesPayload.push({name: f.name||'image.png', type: f.type||'image/png', data});
-              }
-              let ok=false; let errMsg='';
-              try{
-                if (hasFb()){
-                  const keyRef = fbPushRef('/Issues');
-                  const key = keyRef.key;
-                  const uploaded = [];
-                  for (const fp of filesPayload){
-                    if (!fp?.data) continue;
-                    const path = `issues/${key}/${Date.now()}_${fp.name||'image'}`;
-                    const sref = window.fb.stApi.stRef(window.fb.storage, path);
-                    await window.fb.stApi.uploadString(sref, fp.data, 'base64');
-                    const url = await window.fb.stApi.getDownloadURL(sref);
-                    uploaded.push(url);
-                  }
-                  await fbSet('/Issues/'+key, { id:key, time:new Date().toISOString(), message: form.message||'', images: uploaded });
-                  ok = true;
-                }else{
-                  const r = await postScript(cfg, { action: 'create_issue_base64', message: form.message||'', files: filesPayload });
-                  ok = !!(r && r.ok!==false);
-                  if(!ok) errMsg = r && r.error ? r.error : 'Apps Script rejected';
-                  if(!ok){
-                    const r2 = await postScript(cfg, { action: 'append_issue_simple', message: form.message||'', files: filesPayload, sheet: 'ปัญหา' });
-                    ok = !!(r2 && r2.ok!==false);
-                  }
-                }
-              }catch(e1){ errMsg = e1?.message||String(e1); }
-              if(!ok) return pushToast('เปิดเคสไม่สำเร็จ: '+errMsg);
-              pushToast('เปิดเคสสำเร็จ','ok');
-              setForm({message:''}); setFiles([]);
-              loadIssues();
-            }catch(e){ pushToast('เปิดเคสไม่สำเร็จ: ' + (e?.message||e)); }
-          }
-
-          async function submitChat(){
-            if(!selectedKey || !chatText.trim()) return;
-            const msg = {role:'user', content: chatText.trim(), time: new Date().toLocaleString()};
-            setChatText('');
-            const local = [...loadLocalChat(selectedKey), msg];
-            saveLocalChat(selectedKey, local);
-            try{
-              if (hasFb()){
-                const keyRef = fbPushRef(`/IssueChats/${selectedKey}`);
-                const key = keyRef.key;
-                await fbSet(`/IssueChats/${selectedKey}/${key}`, msg);
-              } else {
-                await postScript(cfg, { action:'issue_comment', issueId: selectedKey, message: msg.content });
-              }
-            }catch{}
-          }
-
-          return (
-            <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-12 md:col-span-5 lg:col-span-4">
-                <div className="card p-4">
-                  <div className="text-lg font-semibold mb-2">เปิดเคสปัญหา</div>
-                  <form onSubmit={submitIssue} className="space-y-3">
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">ปัญหา *</div>
-                      <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows="4" value={form.message} onChange={e=>setForm({message:e.target.value})} required />
+            {!VIEW_ONLY && page==='issues' && (
+              <button onClick={()=>exportToExcel(issues, "issues.xlsx")} className="btn bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-sm hover:scale-105 animate-bounce">Export ปัญหา</button>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto px-4 py-5">
+        {/* Plan Page */}
+        {page==='plan'&&(
+          <div className="grid grid-cols-12 gap-6">
+            <aside className="col-span-12 md:col-span-3">
+              <div className="card p-3 fadein">
+                <div className="flex items-center gap-2 text-slate-700 font-semibold mb-2">
+                  <span className="w-5 h-5 rounded bg-sky-500 text-white grid place-items-center text-[10px]">E</span>Employee
+                </div>
+                <input placeholder="Search by name..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
+                <div className="mt-2"><TypeSelect value={typeFilter} onChange={setTypeFilter} withAll /></div>
+                <div className="mt-3 max-h-[60vh] overflow-auto pr-1">
+                  {filteredUsers.map(u => (<div key={u.id} draggable={!VIEW_ONLY} onDragStart={(e)=>onDragStartEmp(e,u)} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 fadein">
+                    <span className="avatar shadow" style={{background:colorFor(u.id)}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
+                      <div className="text-[10px] text-slate-500">{u.id}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">แนบรูป (สูงสุด 4 รูป)</div>
-                      <input type="file" accept="image/*" multiple onChange={onFiles} />
-                      {files.length>0 && (
-                        <div className="flex gap-2 mt-2 flex-wrap">
-                          {files.map((f,i)=>(<div key={i} className="text-xs bg-slate-100 px-2 py-1 rounded">{f.name}</div>))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <button type="submit" className="btnP">บันทึกเคส</button>
-                    </div>
-                  </form>
+                    {!VIEW_ONLY && <button className="text-rose-600 text-xs border px-2 py-1 rounded" onClick={()=>deleteUser(u.id)}>ลบ</button>}
+                  </div>))}
                 </div>
               </div>
-              <div className="col-span-12 md:col-span-7 lg:col-span-8">
-                <div className="card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-lg font-semibold">ประวัติปัญหา</div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-slate-500">เรียง</span>
-                      <select className="border rounded px-2 py-1" value={sortOrder} onChange={e=>setSortOrder(e.target.value)}>
-                        <option value="desc">ใหม่ → เก่า</option>
-                        <option value="asc">เก่า → ใหม่</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-12 gap-4">
-                    <div className="col-span-12 lg:col-span-7 max-h-[50vh] overflow-auto">
-                      <table className="min-w-full text-sm">
-                        <thead className="text-left text-slate-500">
-                          <tr><th className="py-2 pr-3">เวลา</th><th className="py-2 pr-3">ข้อความ</th><th className="py-2">รูป</th></tr>
-                        </thead>
-                        <tbody>
-                          {[...issues].sort((a,b)=> sortOrder==='desc' ? String(b.time||'').localeCompare(String(a.time||'')) : String(a.time||'').localeCompare(String(b.time||''))).map((it,idx)=>{
-                            const key = getIssueKey(it, idx);
-                            return (
-                              <tr key={key} className={`border-t cursor-pointer ${selectedKey===key?'bg-sky-50':''}`} onClick={()=>setSelectedKey(key)}>
-                                <td className="py-2 pr-3">{it.time||''}</td>
-                                <td className="py-2 pr-3 whitespace-pre-wrap">{it.message||''}</td>
-                                <td className="py-2">
-                                  <div className="flex gap-2 flex-wrap">
-                                    {(it.images||[]).map((url,i)=>(<a key={i} href={url} target="_blank" className="text-sky-600 underline">รูป {i+1}</a>))}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="col-span-12 lg:col-span-5">
-                      <div className="border rounded-xl p-3 h-full flex flex-col">
-                        <div className="font-semibold mb-2">พูดคุยในเคส</div>
-                        {selectedKey ? (
-                          <>
-                            <div className="flex-1 overflow-auto space-y-2 mb-2">
-                              {loadLocalChat(selectedKey).map((m,i)=>(
-                                <div key={i} className={m.role==='user'?'text-right':'text-left'}>
-                                  <div className={`inline-block px-3 py-2 rounded-lg ${m.role==='user'?'bg-sky-100':'bg-slate-100'}`}>{m.content}</div>
-                                  <div className="text-[10px] text-slate-500 mt-1">{m.time||''}</div>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="พิมพ์ข้อความ..." value={chatText} onChange={e=>setChatText(e.target.value)} />
-                              <button className="btnP" type="button" onClick={submitChat}>ส่ง</button>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-sm text-slate-500">เลือกเคสจากตารางเพื่อเริ่มพูดคุย</div>
-                        )}
+            </aside>
+            <section className="col-span-12 md:col-span-9">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {['Floor 1','Floor 2','Floor 3'].map(floor => (
+                  <div key={floor} className={floor==='Floor 1'?'floor1':floor==='Floor 2'?'floor2':'floor3'}>
+                    <div className="sectionHead mb-2 flex items-center justify-between">
+                      <div className="floorTitle text-lg animate-pulse">{floor}</div>
+                      <div className="flex items-center gap-2">
+                        {!VIEW_ONLY && <button className="btn" onClick={() => clearFloor(floor)}>🧹 ล้าง</button>}
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {(STATIONS[floor]||[]).map(st => <Tile key={st} station={st} userMap={userMap} taskByStation={taskByStation} setAssignStation={setAssignStation} setAssignQuery={setAssignQuery} setAssignSel={setAssignSel}/>)}
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-            </div>
-          );
-        }
-
-        return (<div className="min-h-screen">
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200">
-            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
-              <button className="text-xl md:text-2xl font-bold hover:text-sky-600" onClick={()=>setPage('plan')}>KKRDC PITL</button>
-              <div className="ml-6 flex items-center gap-2">
-                <button className={`btn ${page==='plan'?'btnP text-white border-sky-500':''}`} onClick={()=>setPage('plan')}>แผนผัง</button>
-                <button className={`btn ${page==='issues'?'btnP text-white border-sky-500':''}`} onClick={()=>{ setPage('issues'); setTimeout(()=>loadIssues(), 50); }}>ปัญหา</button>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-            
-            {!VIEW_ONLY && page==='plan' && <button onClick={clearAll} className="btn">🧹 ล้างทั้งหมด</button>}
-            {!VIEW_ONLY && <button onClick={()=>setAdding(true)} className="btn">+ เพิ่มพนักงาน</button>}
-              </div>
-            </div>
+            </section>
           </div>
+        )}
+        {/* Issues Page */}
+        {page==='issues'&&<IssuesPage issues={issues} loadIssues={loadIssues} cfg={cfg} />}
+      </div>
 
-          <div className="max-w-7xl mx-auto px-4 py-5">
-            {page==='plan' ? (
-              <div className="grid grid-cols-12 gap-6">
-                <aside className="col-span-12 md:col-span-3"><div className="card p-3">
-                  <div className="flex items-center gap-2 text-slate-700 font-semibold mb-2"><span className="w-5 h-5 rounded bg-sky-500 text-white grid place-items-center text-[10px]">E</span>Employees</div>
-                  <input placeholder="Search by name..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
-                  <div className="mt-2"><TypeSelect value={typeFilter} onChange={setTypeFilter} withAll /></div>
-                  <div className="mt-3 max-h-[60vh] overflow-auto pr-1">
-                    {filteredUsers.map(u => (<div key={u.id} draggable={!VIEW_ONLY} onDragStart={(e)=>onDragStartEmp(e,u)} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50">
-                      <span className="avatar" style={{background:colorFor(u.id)}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
-                        <div className="text-[10px] text-slate-500">{u.id}</div>
-                      </div>
-                      {!VIEW_ONLY && <button className="text-rose-600 text-xs border px-2 py-1 rounded" onClick={()=>deleteUser(u.id)}>ลบ</button>}
-                    </div>))}
-                  </div>
-          
-                </div></aside>
-
-                <section className="col-span-12 md:col-span-9">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {['Floor 1','Floor 2','Floor 3'].map(floor => (
-                      <div key={floor} className={floor==='Floor 1'?'floor1':floor==='Floor 2'?'floor2':'floor3'}>
-                        <div className="sectionHead mb-2 flex items-center justify-between">
-                          <div className="floorTitle text-lg">{floor}</div>
-                          <div className="flex items-center gap-2">
-                            {!VIEW_ONLY && <button className="btn" onClick={() => clearFloor(floor)}>🧹 ล้าง</button>}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3">
-                          {(STATIONS[floor]||[]).map(st => <Tile key={st} station={st} />)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-            ) : page==='issues' ? (
-              <IssuesPage/>
-            ) : null}
-          </div>
-
-          <div className="text-center text-xs text-slate-500 pb-6">{loading?'Loading…':err?`เกิดข้อผิดพลาด: ${err}`:'พร้อมใช้งาน'}</div>
-
-          {adding && (<div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50"><div className="card w-[520px] max-w-[95vw] p-4">
+      <div className="text-center text-xs text-slate-500 pb-6">{loading?'Loading…':err?`เกิดข้อผิดพลาด: ${err}`:'พร้อมใช้งาน'}</div>
+      {adding && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
+          <div className="card w-[520px] max-w-[95vw] p-5 fadein">
             <div className="text-lg font-semibold">เพิ่มพนักงาน</div>
             <form onSubmit={onSubmitAdd}>
               <div className="grid grid-cols-2 gap-3 mt-3">
-                <div><div className="text-xs text-slate-500 mb-1">ID (คอลัมน์ B) *</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.id} onChange={e=>setNewUser({...newUser,id:e.target.value})} required /></div>
-                <div><div className="text-xs text-slate-500 mb-1">ชื่อ-นามสกุล (คอลัมน์ C) *</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})} required /></div>
+                <div><div className="text-xs text-slate-500 mb-1">ID (คอลัมน์ B) *</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.id} onChange={e=>setNewUser({...newUser,id:e.target.value})}/></div>
+                <div><div className="text-xs text-slate-500 mb-1">ชื่อ-นามสกุล (คอลัมน์ C) *</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/></div>
                 <div className="col-span-2"><div className="text-xs text-slate-500 mb-1">TYPE</div>
                   <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.type} onChange={e=>setNewUser({...newUser,type:e.target.value})}>
                     <option value="">(ไม่ระบุ)</option>
@@ -736,265 +565,304 @@
                 <button type="button" className="btn" onClick={()=>setAdding(false)}>ยกเลิก</button>
                 <button type="submit" className="btnP">บันทึก</button>
               </div>
-              
             </form>
-          </div></div>)}
+          </div>
+        </div>
+      )}
+      {importing && <EmployeeImportModal />}
+      {assignStation && (
+        <AssignModal
+          users={users}
+          assignStation={assignStation}
+          setAssignStation={setAssignStation}
+          assignSel={assignSel}
+          setAssignSel={setAssignSel}
+          assignQuery={assignQuery}
+          setAssignQuery={setAssignQuery}
+          writePlan={writePlan}
+        />
+      )}
+    </div>
+  );
 
-          {assignStation && (
-            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
-              <div className="card w-[560px] max-w-[95vw] p-4">
-                <div className="text-lg font-semibold">เลือกพนักงาน — สถานี {assignStation}</div>
-                <div className="mt-2 flex items-center gap-2">
-                  <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="ค้นหา..." value={assignQuery} onChange={e=>setAssignQuery(e.target.value)} />
-                </div>
-                <div className="max-h-[50vh] overflow-auto mt-3 space-y-1 pr-1">
-                  {users.filter(u=> (u.name+u.id+(u.type||'')).toLowerCase().includes(assignQuery.toLowerCase())).map(u=>{
-                    const chosen = assignSel.has(u.id);
-                    return (
-                      <label key={u.id} className={`flex items-center gap-2 px-2 py-2 rounded-lg ${chosen?'bg-sky-50 border border-sky-200':'hover:bg-slate-50'}`}>
-                        <input type="checkbox" checked={chosen} onChange={e=>{
-                          setAssignSel(s=>{ const copy=new Set(s); if(copy.has(u.id)) copy.delete(u.id); else copy.add(u.id); return copy; });
-                        }} />
-                        <span className="avatar" style={{background:colorFor(u.id)}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
-                          <div className="text-[10px] text-slate-500">{u.id}</div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <button className="btn" onClick={()=>{ setAssignStation(null); setAssignSel(new Set()); }}>ยกเลิก</button>
-                  <button className="btnP" onClick={async()=>{
-                    const list = Array.from(assignSel);
-                    await writePlan(assignStation, list);
-                    setAssignStation(null); setAssignSel(new Set());
-                    pushToast('อัปเดตพนักงานสำเร็จ','ok');
-                  }}>บันทึก</button>
-                </div>
-              </div>
-            </div>
-          )}
+  // --- Drag and Drop Employee Logic ---
+  function onDragStartEmp(e, emp) { e.dataTransfer.setData('text/plain', JSON.stringify(emp)); e.dataTransfer.effectAllowed = 'move'; }
+  async function clearFloor(floor){
+    if(VIEW_ONLY) return alert('View-only mode');
+    const stations = STATIONS[floor] || [];
+    const newTasks = tasks.map(t => ({...t, assignedList: stations.includes(String(t.station)) ? [] : (t.assignedList||[]) }));
+    setTasks(newTasks);
+    for (const st of stations){ await writePlan(st, []); }
+    pushToast('ล้างคนออกจาก '+floor,'ok');
+  }
+  async function clearAll(){
+    await clearFloor('Floor 1'); await clearFloor('Floor 2'); await clearFloor('Floor 3');
+  }
 
-          
-        </div>);
-      }
+  // --- Tile Component ---
+  function Tile({station, userMap, taskByStation, setAssignStation, setAssignQuery, setAssignSel}) {
+    const t = taskByStation.get(station) || {station, assignedList:[]};
+    const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean);
+    const missing = !assigned.length;
+    return (
+      <div className={`tile ${missing?'missing':''}`}
+        onDragOver={(e)=>{e.preventDefault(); e.currentTarget.classList.add('drop');}}
+        onDragLeave={(e)=>{e.currentTarget.classList.remove('drop');}}
+        onDrop={async(e)=>{
+          e.preventDefault(); e.currentTarget.classList.remove('drop');
+          let emp=null; try{ emp = JSON.parse(e.dataTransfer.getData('text/plain')||''); }catch{}
+          if(!emp?.id) return;
+          let newList=[];
+          setTasks(ts => { const copy = ts.map(t => ({...t, assignedList:[...(t.assignedList||[])]}));
+            copy.forEach(t => { const idx = (t.assignedList||[]).indexOf(emp.id); if(idx>-1) t.assignedList.splice(idx,1); });
+            let tgt = copy.find(t => t.station===station); if(!tgt) { tgt={station, id:station, assignedList:[]}; copy.push(tgt); }
+            if(!tgt.assignedList.includes(emp.id)) tgt.assignedList.push(emp.id);
+            newList = [...tgt.assignedList];
+            return copy; });
+          await writePlan(station, newList);
+          pushToast(`มอบหมาย ${emp.name} → ${station}`,'ok');
+        }}>
+        <div className="flex items-center gap-2 w-full justify-between"><div className="tileTitle flex items-center gap-2">{station}</div>{t.type && <span className="pill text-slate-600">{t.type}</span>}</div>
+        {assigned.length>0 ? (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {assigned.slice(0,6).map(a => (
+              <span key={a.id} className="flex items-center gap-1">
+                <span className="avatar" style={{background:colorFor(a.id)}}>{(a.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                <span className="text-xs text-slate-700">{a.name}{a?.type ? ' ('+a.type+')' : ''}</span>
+              </span>
+            ))}
+            {assigned.length>6 && <span className="text-xs text-slate-500">+{assigned.length-6}</span>}
+          </div>
+        ) : (
+          <button className="pill hover:shadow" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>คลิกเพื่อเลือกพนักงาน</button>
+        )}
+        <div className="mt-2">
+          <button className="text-xs underline text-sky-600" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>แก้ไขพนักงาน</button>
+        </div>
+      </div>
+    );
+  }
 
-      
-        function KPIPage({users, cfg}){
-          const [form,setForm] = useState({
-            userId:'', date: new Date().toISOString().slice(0,10), userName:'', kpiTarget:'',
-            station:'', floor:'', shift:'', function:'',
-            standardHour:'', productiveHour:'', idleTime:'', breakTime:'',
-            totalHour:'', totalUnit:'', totalTote:'', upmhTpmh:'', percent:''
+  // --- Assign Modal ---
+  function AssignModal({users, assignStation, setAssignStation, assignSel, setAssignSel, assignQuery, setAssignQuery, writePlan}) {
+    return (
+      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
+        <div className="card w-[560px] max-w-[95vw] p-4 fadein">
+          <div className="text-lg font-semibold">เลือกพนักงาน — สถานี {assignStation}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="ค้นหา..." value={assignQuery} onChange={e=>setAssignQuery(e.target.value)} />
+          </div>
+          <div className="max-h-[50vh] overflow-auto mt-3 space-y-1 pr-1">
+            {users.filter(u=> (u.name+u.id+(u.type||'')).toLowerCase().includes(assignQuery.toLowerCase())).map(u=>{
+              const chosen = assignSel.has(u.id);
+              return (
+                <label key={u.id} className={`flex items-center gap-2 px-2 py-2 rounded-lg ${chosen?'bg-sky-50 border border-sky-200':'hover:bg-slate-50'}`}>
+                  <input type="checkbox" checked={chosen} onChange={e=>{
+                    setAssignSel(s=>{ const copy=new Set(s); if(copy.has(u.id)) copy.delete(u.id); else copy.add(u.id); return copy; });
+                  }} />
+                  <span className="avatar" style={{background:colorFor(u.id)}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
+                    <div className="text-[10px] text-slate-500">{u.id}</div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <button className="btn" onClick={()=>{ setAssignStation(null); setAssignSel(new Set()); }}>ยกเลิก</button>
+            <button className="btnP" onClick={async()=>{
+              const list = Array.from(assignSel);
+              await writePlan(assignStation, list);
+              setAssignStation(null); setAssignSel(new Set());
+              pushToast('อัปเดตพนักงานสำเร็จ','ok');
+            }}>บันทึก</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Issues Page ---
+  function IssuesPage({issues, loadIssues, cfg}) {
+    const [form, setForm] = useState({message:''});
+    const [files, setFiles] = useState([]);
+    const [selectedKey, setSelectedKey] = useState(null);
+    const [chatText, setChatText] = useState('');
+    const [sortOrder, setSortOrder] = useState('desc'); // 'desc' newest→oldest, 'asc' oldest→newest
+    useEffect(()=>{ if(!issues?.length) loadIssues(); }, []);
+    const onFiles = (e)=>{ setFiles(Array.from(e.target.files||[]).slice(0,4)); };
+
+    const getIssueKey = (it, i) => String(it.id || `${it.time||''}|${(it.taskId||'')}` || i);
+    const loadLocalChat = (key)=>{
+      try{ const j = JSON.parse(localStorage.getItem('issue_chat_'+key)||'[]'); return Array.isArray(j)?j:[]; }catch{return []}
+    };
+    const saveLocalChat = (key, arr)=>{ try{ localStorage.setItem('issue_chat_'+key, JSON.stringify(arr||[])); }catch{} };
+
+    async function submitIssue(e){
+      e.preventDefault();
+      if(!form.message.trim()) return pushToast('กรุณากรอกข้อความปัญหา');
+      try{
+        const filesPayload = [];
+        for (const f of files) {
+          const data = await new Promise((resolve, reject)=>{
+            const fr = new FileReader();
+            fr.onload = () => resolve(String(fr.result||'').split(',').pop());
+            fr.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'));
+            fr.readAsDataURL(f);
           });
-          const [rows,setRows] = useState([]);
-          const [summary,setSummary] = useState({byFunc:[], totals:{}});
-          const stations = Object.values(STATIONS).flat();
-
-          useEffect(()=>{
-            if (form.userId && !form.userName) {
-              const u = users.find(x=>x.id===form.userId);
-              if (u) setForm(f=>({...f,userName:u.name}));
+          filesPayload.push({name: f.name||'image.png', type: f.type||'image/png', data});
+        }
+        let ok=false; let errMsg='';
+        try{
+          if (hasFb()){
+            const keyRef = fbPushRef('/Issues');
+            const key = keyRef.key;
+            const uploaded = [];
+            for (const fp of filesPayload){
+              if (!fp?.data) continue;
+              const path = `issues/${key}/${Date.now()}_${fp.name||'image'}`;
+              const sref = window.fb.stApi.stRef(window.fb.storage, path);
+              await window.fb.stApi.uploadString(sref, fp.data, 'base64');
+              const url = await window.fb.stApi.getDownloadURL(sref);
+              uploaded.push(url);
             }
-          },[form.userId, users]);
-
-          async function saveKPI(e){
-            e.preventDefault();
-            if (!form.userId) return pushToast('กรุณาเลือกพนักงาน');
-            try{
-              const r = await postScript(cfg, { action:'create_kpi', record: {
-                'User ID': form.userId,
-                'Date': form.date,
-                'UserName': form.userName,
-                'KPI Target': form.kpiTarget,
-                'Station': form.station,
-                'Floor': form.floor,
-                'Shift': form.shift,
-                'Function': form.function,
-                'Standard Hour': form.standardHour,
-                'Productive Hour': form.productiveHour,
-                'Idle Time': form.idleTime,
-                'Break Time': form.breakTime,
-                'Total Hour': form.totalHour,
-                'Total Unit': form.totalUnit,
-                'Total Tote': form.totalTote,
-                'UPMH / TPMH': form.upmhTpmh,
-                'PERCENT': form.percent
-              }});
-              if (!r || r.ok===false) throw new Error(r && r.error ? r.error : 'Apps Script rejected');
-              pushToast('บันทึก KPI สำเร็จ','ok');
-              await query();
-            }catch(e){ pushToast('บันทึก KPI ไม่สำเร็จ: ' + (e?.message||e)); }
-          }
-
-          async function query(){
-            try{
-              const r = await postScript(cfg, { action:'list_kpi', userId: form.userId||'', date: form.date||'' });
-              if (r && r.ok) { setRows(r.items||[]); return; }
-            }catch(e){ /* fallback below */ }
-            try{
-              const vals = await fetchValues(cfg, 'KPI', 'A1:Z');
-              setRows(parseKPI(vals));
-            }catch(e2){ pushToast('โหลด KPI ไม่สำเร็จ: ' + (e2?.message||e2)); }
-          }
-
-          useEffect(()=>{ query(); }, [form.userId, form.date]);
-
-          useEffect(()=>{
-            // compute summary by Function for selected date (if any)
-            const filtered = rows.filter(r=>!form.date || String(r['Date']||'').startsWith(form.date));
-            const by = new Map();
-            for(const r of filtered){
-              const fn = r['Function']||'-';
-              const unit = parseFloat(String(r['Total Unit']||'0').replace(/,/g,''))||0;
-              const hour = parseFloat(String(r['Total Hour']||'0').replace(/,/g,''))||0;
-              const cur = by.get(fn)||{function:fn, totalUnit:0, totalHour:0};
-              cur.totalUnit += unit; cur.totalHour += hour; by.set(fn, cur);
+            await fbSet('/Issues/'+key, { id:key, time:new Date().toISOString(), message: form.message||'', images: uploaded });
+            ok = true;
+          }else{
+            const r = await postScript(cfg, { action: 'create_issue_base64', message: form.message||'', files: filesPayload });
+            ok = !!(r && r.ok!==false);
+            if(!ok) errMsg = r && r.error ? r.error : 'Apps Script rejected';
+            if(!ok){
+              const r2 = await postScript(cfg, { action: 'append_issue_simple', message: form.message||'', files: filesPayload, sheet: 'ปัญหา' });
+              ok = !!(r2 && r2.ok!==false);
             }
-            const arr = Array.from(by.values()).map(x=>({
-              ...x,
-              upmh: x.totalHour>0 ? (x.totalUnit/x.totalHour).toFixed(2) : '0.00'
-            })).sort((a,b)=>b.totalUnit-a.totalUnit);
-            const totals = arr.reduce((acc,x)=>({
-              totalUnit:(acc.totalUnit||0)+x.totalUnit,
-              totalHour:(acc.totalHour||0)+x.totalHour
-            }),{totalUnit:0,totalHour:0});
-            setSummary({byFunc:arr, totals});
-          },[rows, form.date]);
+          }
+        }catch(e1){ errMsg = e1?.message||String(e1); }
+        if(!ok) return pushToast('เปิดเคสไม่สำเร็จ: '+errMsg);
+        pushToast('เปิดเคสสำเร็จ','ok');
+        setForm({message:''}); setFiles([]);
+        loadIssues();
+      }catch(e){ pushToast('เปิดเคสไม่สำเร็จ: ' + (e?.message||e)); }
+    }
 
-          return (
-            <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-12">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="card p-3">
-                    <div className="text-xs text-slate-500">รวม Unit</div>
-                    <div className="text-2xl font-bold">{summary.totals.totalUnit||0}</div>
-                  </div>
-                  <div className="card p-3">
-                    <div className="text-xs text-slate-500">รวมชั่วโมง</div>
-                    <div className="text-2xl font-bold">{summary.totals.totalHour||0}</div>
-                  </div>
-                  <div className="card p-3">
-                    <div className="text-xs text-slate-500">เฉลี่ย UPMH</div>
-                    <div className="text-2xl font-bold">{(summary.totals.totalHour>0? (summary.totals.totalUnit/summary.totals.totalHour).toFixed(2) : '0.00')}</div>
-                  </div>
-                  <div className="card p-3">
-                    <div className="text-xs text-slate-500">จำนวน Function</div>
-                    <div className="text-2xl font-bold">{summary.byFunc.length}</div>
-                  </div>
-                </div>
+    async function submitChat(){
+      if(!selectedKey || !chatText.trim()) return;
+      const msg = {role:'user', content: chatText.trim(), time: new Date().toLocaleString()};
+      setChatText('');
+      const local = [...loadLocalChat(selectedKey), msg];
+      saveLocalChat(selectedKey, local);
+      try{
+        if (hasFb()){
+          const keyRef = fbPushRef(`/IssueChats/${selectedKey}`);
+          const key = keyRef.key;
+          await fbSet(`/IssueChats/${selectedKey}/${key}`, msg);
+        } else {
+          await postScript(cfg, { action:'issue_comment', issueId: selectedKey, message: msg.content });
+        }
+      }catch{}
+    }
+
+    return (
+      <div className="grid grid-cols-12 gap-6">
+        <div className="col-span-12 md:col-span-5 lg:col-span-4">
+          <div className="card p-4 fadein">
+            <div className="text-lg font-semibold mb-2">เปิดเคสปัญหา</div>
+            <form onSubmit={submitIssue} className="space-y-3">
+              <div>
+                <div className="text-xs text-slate-500 mb-1">ปัญหา *</div>
+                <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows="4" value={form.message} onChange={e=>setForm({message:e.target.value})} required />
               </div>
-              <div className="col-span-12 md:col-span-5">
-                <div className="card p-4">
-                  <div className="text-lg font-semibold mb-3">บันทึก KPI</div>
-                  <form onSubmit={saveKPI} className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <div className="text-xs text-slate-500 mb-1">พนักงาน *</div>
-                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        value={form.userId} onChange={e=>setForm({...form, userId:e.target.value})}>
-                        <option value="">-- เลือก --</option>
-                        {users.map(u=><option key={u.id} value={u.id}>{u.name} ({u.id})</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">วันที่</div>
-                      <input type="date" className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        value={form.date} onChange={e=>setForm({...form, date:e.target.value})}/>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Station</div>
-                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.station} onChange={e=>setForm({...form, station:e.target.value})}>
-                        <option value="">-</option>
-                        {stations.map(st=><option key={st} value={st}>{st}</option>)}
-                      </select>
-                    </div>
-                    <div><div className="text-xs text-slate-500 mb-1">Floor</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.floor} onChange={e=>setForm({...form, floor:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Shift</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.shift} onChange={e=>setForm({...form, shift:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Function</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.function} onChange={e=>setForm({...form, function:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">KPI Target</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.kpiTarget} onChange={e=>setForm({...form, kpiTarget:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Standard Hour</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.standardHour} onChange={e=>setForm({...form, standardHour:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Productive Hour</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.productiveHour} onChange={e=>setForm({...form, productiveHour:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Idle Time</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.idleTime} onChange={e=>setForm({...form, idleTime:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Break Time</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.breakTime} onChange={e=>setForm({...form, breakTime:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Total Hour</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.totalHour} onChange={e=>setForm({...form, totalHour:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Total Unit</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.totalUnit} onChange={e=>setForm({...form, totalUnit:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">Total Tote</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.totalTote} onChange={e=>setForm({...form, totalTote:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">UPMH / TPMH</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.upmhTpmh} onChange={e=>setForm({...form, upmhTpmh:e.target.value})}/></div>
-                    <div><div className="text-xs text-slate-500 mb-1">PERCENT</div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.percent} onChange={e=>setForm({...form, percent:e.target.value})}/></div>
-                    <div className="col-span-2 flex justify-end gap-2 mt-2"><button type="submit" className="btnP">บันทึก KPI</button></div>
-                  </form>
-                </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-1">แนบรูป (สูงสุด 4 รูป)</div>
+                <input type="file" accept="image/*" multiple onChange={onFiles} />
+                {files.length>0 && (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {files.map((f,i)=>(<div key={i} className="text-xs bg-slate-100 px-2 py-1 rounded">{f.name}</div>))}
+                  </div>
+                )}
               </div>
-              <div className="col-span-12 md:col-span-7">
-                <div className="card p-4">
-                  <div className="text-lg font-semibold mb-2">ประวัติ KPI</div>
-                  <div className="overflow-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="text-left text-slate-500">
-                        <tr>
-                          <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">User</th><th className="py-2 pr-3">Station</th><th className="py-2 pr-3">Total Hour</th><th className="py-2 pr-3">Total Unit</th><th className="py-2 pr-3">UPMH/TPMH</th><th className="py-2 pr-3">%</th>
+              <div className="flex justify-end gap-2">
+                <button type="submit" className="btnP">บันทึกเคส</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div className="col-span-12 md:col-span-7 lg:col-span-8">
+          <div className="card p-4 fadein">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-lg font-semibold">ประวัติปัญหา</div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-slate-500">เรียง</span>
+                <select className="border rounded px-2 py-1" value={sortOrder} onChange={e=>setSortOrder(e.target.value)}>
+                  <option value="desc">ใหม่ → เก่า</option>
+                  <option value="asc">เก่า → ใหม่</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-12 lg:col-span-7 max-h-[50vh] overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-slate-500">
+                    <tr><th className="py-2 pr-3">เวลา</th><th className="py-2 pr-3">ข้อความ</th><th className="py-2">รูป</th></tr>
+                  </thead>
+                  <tbody>
+                    {[...issues].sort((a,b)=> sortOrder==='desc' ? String(b.time||'').localeCompare(String(a.time||'')) : String(a.time||'').localeCompare(String(b.time||''))).map((it,idx)=>{
+                      const key = getIssueKey(it, idx);
+                      return (
+                        <tr key={key} className={`border-t cursor-pointer ${selectedKey===key?'bg-sky-50':''}`} onClick={()=>setSelectedKey(key)}>
+                          <td className="py-2 pr-3">{it.time||''}</td>
+                          <td className="py-2 pr-3 whitespace-pre-wrap">{it.message||''}</td>
+                          <td className="py-2">
+                            <div className="flex gap-2 flex-wrap">
+                              {(it.images||[]).map((url,i)=>(<a key={i} href={url} target="_blank" className="text-sky-600 underline">รูป {i+1}</a>))}
+                            </div>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((r,i)=>(
-                          <tr key={i} className="border-t">
-                            <td className="py-2 pr-3">{r['Date']||''}</td>
-                            <td className="py-2 pr-3">{r['UserName']||''} ({r['User ID']||''})</td>
-                            <td className="py-2 pr-3">{r['Station']||''}</td>
-                            <td className="py-2 pr-3">{r['Total Hour']||''}</td>
-                            <td className="py-2 pr-3">{r['Total Unit']||''}</td>
-                            <td className="py-2 pr-3">{r['UPMH / TPMH']||''}</td>
-                            <td className="py-2 pr-3">{r['PERCENT']||''}</td>
-                          </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="col-span-12 lg:col-span-5">
+                <div className="border rounded-xl p-3 h-full flex flex-col">
+                  <div className="font-semibold mb-2">พูดคุยในเคส</div>
+                  {selectedKey ? (
+                    <>
+                      <div className="flex-1 overflow-auto space-y-2 mb-2">
+                        {loadLocalChat(selectedKey).map((m,i)=>(
+                          <div key={i} className={m.role==='user'?'text-right':'text-left'}>
+                            <div className={`inline-block px-3 py-2 rounded-lg ${m.role==='user'?'bg-sky-100':'bg-slate-100'}`}>{m.content}</div>
+                            <div className="text-[10px] text-slate-500 mt-1">{m.time||''}</div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div className="card p-4 mt-4">
-                  <div className="text-lg font-semibold mb-2">สรุปตาม Function</div>
-                  <div className="overflow-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="text-left text-slate-500">
-                        <tr>
-                          <th className="py-2 pr-3">Function</th>
-                          <th className="py-2 pr-3">Total Unit</th>
-                          <th className="py-2 pr-3">Total Hour</th>
-                          <th className="py-2 pr-3">UPMH</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {summary.byFunc.map((r,i)=>(
-                          <tr key={i} className="border-t">
-                            <td className="py-2 pr-3">{r.function}</td>
-                            <td className="py-2 pr-3">{r.totalUnit}</td>
-                            <td className="py-2 pr-3">{r.totalHour}</td>
-                            <td className="py-2 pr-3">{r.upmh}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="พิมพ์ข้อความ..." value={chatText} onChange={e=>setChatText(e.target.value)} />
+                        <button className="btnP" type="button" onClick={submitChat}>ส่ง</button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-slate-500">เลือกเคสจากตารางเพื่อเริ่มพูดคุย</div>
+                  )}
                 </div>
               </div>
             </div>
-          );
-        }
-    
-
-      ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-    </script>
-    <script>
-      // Service worker
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(()=>{});
-        });
-      }
-    </script>
-
-    <!-- Firebase old snippet removed: now using inventory-21fd3 config above -->
-  </body>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+<script>
+  // Service worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    });
+  }
+</script>
+</body>
 </html>
