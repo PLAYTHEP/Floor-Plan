@@ -178,6 +178,19 @@
           pushToast('โหลดข้อมูลไม่สำเร็จ (Sheets/API)'); throw e;
         }
       }
+
+      // fetch multiple sheets in one request via Google Sheets API
+      async function fetchSheetData(cfg){
+        const ranges=[SHEET_PLAN+'!A1:Z',SHEET_USER+'!A1:Z',SHEET_ISSUE+'!A1:Z'];
+        const base=`https://sheets.googleapis.com/v4/spreadsheets/${cfg.SHEET_ID}/values:batchGet?key=${cfg.API_KEY}`;
+        const url=base+"&"+ranges.map(r=>`ranges=${encodeURIComponent(r)}`).join('&');
+        const r=await fetch(url);
+        const t=await r.text(); let j=null; try{ j=JSON.parse(t); }catch{}
+        if(!r.ok) throw new Error('Sheets API '+r.status+': '+t.slice(0,120));
+        const map={};
+        (j.valueRanges||[]).forEach(v=>{ const name=v.range.split('!')[0].replace(/'/g,''); map[name]=v.values||[]; });
+        return map;
+      }
       async function postScript(cfg, payload){
         try{ // JSON
           const r = await fetch(cfg.APPS_SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
@@ -229,19 +242,12 @@
         const loadAll = async () => {
           setLoading(true);
           try{
-            const [u, p] = await Promise.all([
-              postScript(cfg, {action:'list_users'}).catch(()=>null),
-              fetchValues(cfg, 'Plan', 'A1:Z')
-            ]);
-            setTasks(parsePlan(p));
-            if (u && u.ok && Array.isArray(u.items)) {
-              setUsers(u.items);
-            } else {
-              const uVals = await fetchValues(cfg, SHEET_USER, 'A1:Z').catch(()=>[]);
-              setUsers(parseUsers(uVals));
-            }
+            const data=await fetchSheetData(cfg);
+            setTasks(parsePlan(data[SHEET_PLAN]||[]));
+            setUsers(parseUsers(data[SHEET_USER]||[]));
+            setIssues(parseIssues(data[SHEET_ISSUE]||[]));
             setErr(null);
-          }catch(e){ setErr('Failed to fetch'); }
+          }catch(e){ setErr('Failed to fetch'); pushToast('โหลดข้อมูลไม่สำเร็จ: '+(e?.message||e)); }
           finally{ setLoading(false); }
         };
         const loadIssues = async () => {
@@ -257,7 +263,7 @@
             setIssues(parseIssues(vals));
           }catch(e){ pushToast('โหลดปัญหาไม่สำเร็จ: ' + (e?.message||e)); }
         };
-        useEffect(()=>{ loadAll(); loadIssues(); }, [cfg.SHEET_ID, cfg.API_KEY]);
+        useEffect(()=>{ loadAll(); }, [cfg.SHEET_ID, cfg.API_KEY]);
 
         function markPending(station, list){
           setPending(prev => {
