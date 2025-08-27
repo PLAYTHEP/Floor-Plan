@@ -23,6 +23,7 @@
       .floor1{--c:#0284c7;--bg:linear-gradient(90deg,rgba(14,165,233,.06),rgba(14,165,233,0))}
       .floor2{--c:#a16207;--bg:linear-gradient(90deg,rgba(234,179,8,.09),rgba(234,179,8,0))}
       .floor3{--c:#4f46e5;--bg:linear-gradient(90deg,rgba(99,102,241,.08),rgba(99,102,241,0))}
+      .floorX{--c:#0ea5e9;--bg:linear-gradient(90deg,rgba(14,165,233,.08),rgba(14,165,233,0))}
       .floorTitle{color:var(--c); font-weight:800}
       .sectionHead{padding:.5rem 1rem;border-radius:.75rem;background:var(--bg);border:1px dashed color-mix(in srgb, var(--c) 40%, transparent)}
       .tileTitle{font-weight:700}
@@ -48,7 +49,6 @@
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
       import { getDatabase, ref as dbRef, get, set, update, remove, child, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
-      import { getStorage } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
       const firebaseConfig = {
         apiKey: "AIzaSyC6Qnfm0xiOsN_FZksKgGi_0i5wovGZ97E",
         authDomain: "inventory-21fd3.firebaseapp.com",
@@ -60,8 +60,7 @@
       };
       const app = initializeApp(firebaseConfig);
       const db = getDatabase(app);
-      const storage = getStorage(app);
-      window.fb = { app, db, storage, dbApi:{ dbRef, get, set, update, remove, child, push, onValue } };
+      window.fb = { app, db, dbApi:{ dbRef, get, set, update, remove, child, push, onValue } };
     </script>
 
     <script type="text/babel">
@@ -78,10 +77,8 @@
           setTimeout(()=>{ try{wrap.removeChild(node)}catch{} }, 3600);
         }catch{}
       }
-      window.addEventListener('error', e=>pushToast('Uncaught: ' + (e?.message||'Unknown error')));
-      window.addEventListener('unhandledrejection', e=>pushToast('Async: ' + (e?.reason?.message||e?.reason||'Promise error')));
 
-      /* ---------- Excel Export ---------- */
+      /* ---------- Excel Export (from Firebase users) ---------- */
       function exportUsersToExcel(users){
         if(!users?.length) return pushToast('ไม่มีรายชื่อให้ Export');
         const rows = users.map(u=>({ ID:u.id||'', Name:u.name||'', TYPE:u.type||'' }));
@@ -104,10 +101,15 @@
       const STATIONS = {
         'Floor 1': ['1101','1102','1103','1104','1105','1106','1107','1201','1203','1205'],
         'Floor 2': ['2101','2102','2103','2104','2105','2201','2203','2205'],
-        'Floor 3': ['3101','3105','3201','3205']
+        'Floor 3': ['3101','3105','3201','3205'],
+        // กลุ่มด้านล่างสุด (Extra)
+        'Extra': ['Support','Case replen','Sorter','put to slot','Picker','Build','Tote','Lan1','Lan2','Lan3','Lan4']
       };
+      const GROUP_ORDER = ['Floor 1','Floor 2','Floor 3','Extra'];
       const DEFAULT_TYPES = ['Support','Case replen','Sorter','Picker','put to slot','Build','Tote'];
+
       const colorFor = key => { const colors=['#0ea5e9','#06b6d4','#14b8a6','#22c55e','#a3e635','#eab308','#f59e0b','#ef4444','#6366f1','#8b5cf6','#ec4899','#f43f5e']; let hash=0; for(let i=0;i<key.length;i++)hash=key.charCodeAt(i)+((hash<<5)-hash); return colors[Math.abs(hash)%colors.length]; };
+      const groupClass = name => name==='Floor 1'?'floor1':name==='Floor 2'?'floor2':name==='Floor 3'?'floor3':'floorX';
 
       /* ======================= APP ======================= */
       function App(){
@@ -171,20 +173,19 @@
           if(!confirm('แน่ใจว่าต้องการลบพนักงาน ID '+id+' ?')) return;
           try{
             await fbRemove('/User/'+String(id));
-            // remove from stations
-            const affected = tasks.filter(t=> (t.assignedList||[]).includes(id));
+            const affected = (tasks||[]).filter(t=> (t.assignedList||[]).includes(id));
             for(const t of affected){ await writePlan(t.station, (t.assignedList||[]).filter(eid=>eid!==id)); }
             pushToast('ลบพนักงานสำเร็จ','ok');
           }catch(e){ pushToast('ลบพนักงานไม่สำเร็จ: '+(e?.message||e)); }
         }
 
-        async function clearFloor(floor){
+        async function clearGroup(group){
           if(VIEW_ONLY) return alert('View-only mode');
-          const stations = STATIONS[floor] || [];
+          const stations = STATIONS[group] || [];
           for (const st of stations){ await writePlan(st, []); }
-          pushToast('ล้างคนออกจาก '+floor,'ok');
+          pushToast('ล้างคนออกจาก '+group,'ok');
         }
-        async function clearAll(){ await clearFloor('Floor 1'); await clearFloor('Floor 2'); await clearFloor('Floor 3'); }
+        async function clearAll(){ for(const g of Object.keys(STATIONS)){ await clearGroup(g); } }
 
         const TypeSelect = ({value,onChange,withAll=false}) => (
           <select className="select w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={value} onChange={e=>onChange(e.target.value)}>
@@ -192,6 +193,24 @@
             {[...new Set([...DEFAULT_TYPES, ...sheetTypes])].map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         );
+
+        // ---- drag helpers ----
+        function onDragStartEmp(e, emp) { e.dataTransfer.setData('text/plain', JSON.stringify(emp)); e.dataTransfer.effectAllowed = 'move'; }
+
+        async function moveEmpToStation(empId, targetStation){
+          // ดึงสถานีทั้งหมดที่มี empId อยู่
+          const containing = (tasks||[]).filter(t => (t.assignedList||[]).includes(empId)).map(t=>({station:t.station, list:t.assignedList}));
+          // เอาออกจากสถานีเดิมทั้งหมด (persist)
+          for (const c of containing){
+            if(c.station===targetStation) continue;
+            const newList = (c.list||[]).filter(id=>id!==empId);
+            await writePlan(c.station, newList);
+          }
+          // เพิ่มลงสถานีใหม่ (persist)
+          const curList = (taskByStation.get(targetStation)?.assignedList)||[];
+          const next = [...curList.filter(id=>id!==empId), empId];
+          await writePlan(targetStation, next);
+        }
 
         return (
           <div className="min-h-screen">
@@ -216,23 +235,69 @@
             </div>
 
             <div className="max-w-7xl mx-auto px-4 py-5">
-              {page==='plan' && <PlanPage
-                users={users} search={search} setSearch={setSearch}
-                typeFilter={typeFilter} setTypeFilter={setTypeFilter}
-                filteredUsers={filteredUsers} userMap={userMap}
-                taskByStation={taskByStation}
-                setAssignStation={setAssignStation}
-                setAssignQuery={setAssignQuery}
-                setAssignSel={setAssignSel}
-                writePlan={writePlan}
-                deleteUser={deleteUser}
-              />}
+              {page==='plan' && (
+                <div className="grid grid-cols-12 gap-6">
+                  {/* Sidebar */}
+                  <aside className="col-span-12 md:col-span-3">
+                    <div className="card p-3 fadein">
+                      <div className="flex items-center gap-2 text-slate-700 font-semibold mb-2">
+                        <span className="w-5 h-5 rounded bg-sky-500 text-white grid place-items-center text-[10px]">E</span>Employee
+                      </div>
+                      <input placeholder="Search by name..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
+                      <div className="mt-2"><TypeSelect value={typeFilter} onChange={setTypeFilter} withAll /></div>
+                      <div className="mt-3 max-h-[60vh] overflow-auto pr-1">
+                        {filteredUsers.map(u => (
+                          <div key={u.id} draggable={!VIEW_ONLY} onDragStart={(e)=>onDragStartEmp(e,u)} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 fadein">
+                            <span className="avatar shadow" style={{background:colorFor(String(u.id))}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
+                              <div className="text-[10px] text-slate-500">{u.id}</div>
+                            </div>
+                            {!VIEW_ONLY && <button className="text-rose-600 text-xs border px-2 py-1 rounded" onClick={()=>deleteUser(u.id)}>ลบ</button>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </aside>
 
-              {page==='issues' && <IssuesPage users={users} />}
+                  {/* Main Grid */}
+                  <section className="col-span-12 md:col-span-9">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {GROUP_ORDER.map(group => (
+                        <div key={group} className={groupClass(group)}>
+                          <div className="sectionHead mb-2 flex items-center justify-between">
+                            <div className="floorTitle text-lg">{group}</div>
+                            <div className="flex items-center gap-2">
+                              {!VIEW_ONLY && <button className="btn" onClick={() => clearGroup(group)}>🧹 ล้าง</button>}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 gap-3">
+                            {(STATIONS[group]||[]).map(st => (
+                              <Tile
+                                key={st}
+                                station={st}
+                                userMap={userMap}
+                                taskByStation={taskByStation}
+                                onMoveEmp={moveEmpToStation}
+                                setAssignStation={setAssignStation}
+                                setAssignQuery={setAssignQuery}
+                                setAssignSel={setAssignSel}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {page==='issues' && <IssuesPage />}
             </div>
 
             <div className="text-center text-xs text-slate-500 pb-6">{loading?'Loading…':err?`เกิดข้อผิดพลาด: ${err}`:'พร้อมใช้งาน'}</div>
 
+            {/* Add User Modal */}
             {adding && (
               <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
                 <div className="card w-[520px] max-w-[95vw] p-5 fadein">
@@ -264,6 +329,7 @@
               </div>
             )}
 
+            {/* Assign Modal */}
             {assignStation && (
               <AssignModal
                 users={users}
@@ -278,185 +344,122 @@
             )}
           </div>
         );
-      }
 
-      /* ---------- Plan Page ---------- */
-      function PlanPage({users,search,setSearch,typeFilter,setTypeFilter,filteredUsers,userMap,taskByStation,setAssignStation,setAssignQuery,setAssignSel,writePlan,deleteUser}){
-        return (
-          <div className="grid grid-cols-12 gap-6">
-            <aside className="col-span-12 md:col-span-3">
-              <div className="card p-3 fadein">
-                <div className="flex items-center gap-2 text-slate-700 font-semibold mb-2">
-                  <span className="w-5 h-5 rounded bg-sky-500 text-white grid place-items-center text-[10px]">E</span>Employee
-                </div>
-                <input placeholder="Search by name..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
-                <div className="mt-2">
-                  <select className="select w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}>
-                    <option value="All">All</option>
-                    {[...new Set(['Support','Case replen','Sorter','Picker','put to slot','Build','Tote', ...users.map(u=>u.type).filter(Boolean)])]
-                      .map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="mt-3 max-h-[60vh] overflow-auto pr-1">
-                  {filteredUsers.map(u => (
-                    <div key={u.id} draggable onDragStart={(e)=>{e.dataTransfer.setData('text/plain', JSON.stringify(u)); e.dataTransfer.effectAllowed='move';}} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 fadein">
-                      <span className="avatar shadow" style={{background:colorFor(String(u.id))}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
-                        <div className="text-[10px] text-slate-500">{u.id}</div>
-                      </div>
-                      <button className="text-rose-600 text-xs border px-2 py-1 rounded" onClick={()=>deleteUser(u.id)}>ลบ</button>
-                    </div>
+        /* ---------- Tile ---------- */
+        function Tile({station, userMap, taskByStation, onMoveEmp, setAssignStation, setAssignQuery, setAssignSel}){
+          const t = taskByStation.get(station) || {station, assignedList:[]};
+          const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean);
+          const missing = !assigned.length;
+          return (
+            <div className={`tile ${missing?'missing':''}`}
+              onDragOver={(e)=>{e.preventDefault(); e.currentTarget.classList.add('drop');}}
+              onDragLeave={(e)=>{e.currentTarget.classList.remove('drop');}}
+              onDrop={async(e)=>{
+                e.preventDefault(); e.currentTarget.classList.remove('drop');
+                let emp=null; try{ emp = JSON.parse(e.dataTransfer.getData('text/plain')||''); }catch{}
+                if(!emp?.id) return;
+                await onMoveEmp(emp.id, station);
+                pushToast(`มอบหมาย ${emp.name} → ${station}`,'ok');
+              }}>
+              <div className="flex items-center gap-2 w-full justify-between">
+                <div className="tileTitle flex items-center gap-2">{station}</div>
+              </div>
+              {assigned.length>0 ? (
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {assigned.slice(0,6).map(a => (
+                    <span key={a.id} className="flex items-center gap-1">
+                      <span className="avatar" style={{background:colorFor(String(a.id))}}>{(a.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                      <span className="text-xs text-slate-700">{a.name}{a?.type ? ' ('+a.type+')' : ''}</span>
+                    </span>
                   ))}
+                  {assigned.length>6 && <span className="text-xs text-slate-500">+{assigned.length-6}</span>}
+                </div>
+              ) : (
+                <button className="pill hover:shadow" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>คลิกเพื่อเลือกพนักงาน</button>
+              )}
+              <div className="mt-2">
+                <button className="text-xs underline text-sky-600" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>แก้ไขพนักงาน</button>
+              </div>
+            </div>
+          );
+        }
+
+        /* ---------- Assign Modal ---------- */
+        function AssignModal({users, assignStation, setAssignStation, assignSel, setAssignSel, assignQuery, setAssignQuery, writePlan}){
+          return (
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
+              <div className="card w-[560px] max-w-[95vw] p-4 fadein">
+                <div className="text-lg font-semibold">เลือกพนักงาน — สถานี {assignStation}</div>
+                <div className="mt-2 flex items-center gap-2">
+                  <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="ค้นหา..." value={assignQuery} onChange={e=>setAssignQuery(e.target.value)} />
+                </div>
+                <div className="max-h-[50vh] overflow-auto mt-3 space-y-1 pr-1">
+                  {users.filter(u=> (u.name+u.id+(u.type||'')).toLowerCase().includes(assignQuery.toLowerCase())).map(u=>{
+                    const chosen = assignSel.has(u.id);
+                    return (
+                      <label key={u.id} className={`flex items-center gap-2 px-2 py-2 rounded-lg ${chosen?'bg-sky-50 border border-sky-200':'hover:bg-slate-50'}`}>
+                        <input type="checkbox" checked={chosen} onChange={()=>{
+                          setAssignSel(s=>{ const copy=new Set(s); if(copy.has(u.id)) copy.delete(u.id); else copy.add(u.id); return copy; });
+                        }} />
+                        <span className="avatar" style={{background:colorFor(String(u.id))}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
+                          <div className="text-[10px] text-slate-500">{u.id}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <button className="btn" onClick={()=>{ setAssignStation(null); setAssignSel(new Set()); }}>ยกเลิก</button>
+                  <button className="btnP" onClick={async()=>{
+                    const list = Array.from(assignSel);
+                    await writePlan(assignStation, list);
+                    setAssignStation(null); setAssignSel(new Set());
+                    pushToast('อัปเดตพนักงานสำเร็จ','ok');
+                  }}>บันทึก</button>
                 </div>
               </div>
-            </aside>
-
-            <section className="col-span-12 md:col-span-9">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {['Floor 1','Floor 2','Floor 3'].map(floor => (
-                  <div key={floor} className={floor==='Floor 1'?'floor1':floor==='Floor 2'?'floor2':'floor3'}>
-                    <div className="sectionHead mb-2 flex items-center justify-between">
-                      <div className="floorTitle text-lg">{floor}</div>
-                      <div className="flex items-center gap-2">
-                        <button className="btn" onClick={async()=>{ const stations = STATIONS[floor]||[]; for(const st of stations){ await writePlan(st,[]);} pushToast('ล้างคนออกจาก '+floor,'ok');}}>🧹 ล้าง</button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3">
-                      {(STATIONS[floor]||[]).map(st => <Tile key={st} station={st} userMap={userMap} taskByStation={taskByStation} setAssignStation={setAssignStation} setAssignQuery={setAssignQuery} setAssignSel={setAssignSel} writePlan={writePlan}/>) }
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        );
+            </div>
+          );
+        }
       }
 
-      function Tile({station, userMap, taskByStation, setAssignStation, setAssignQuery, setAssignSel, writePlan}){
-        const t = taskByStation.get(station) || {station, assignedList:[]};
-        const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean);
-        const missing = !assigned.length;
-        return (
-          <div className={`tile ${missing?'missing':''}`}
-            onDragOver={(e)=>{e.preventDefault(); e.currentTarget.classList.add('drop');}}
-            onDragLeave={(e)=>{e.currentTarget.classList.remove('drop');}}
-            onDrop={async(e)=>{
-              e.preventDefault(); e.currentTarget.classList.remove('drop');
-              let emp=null; try{ emp = JSON.parse(e.dataTransfer.getData('text/plain')||''); }catch{}
-              if(!emp?.id) return;
-              // remove from other stations and add to this
-              const cur = (taskByStation.get(station)?.assignedList)||[];
-              const next = [...cur, emp.id].filter((v,i,a)=>a.indexOf(v)===i);
-              await writePlan(station, next);
-              pushToast(`มอบหมาย ${emp.name} → ${station}`,'ok');
-            }}>
-            <div className="flex items-center gap-2 w-full justify-between">
-              <div className="tileTitle flex items-center gap-2">{station}</div>
-            </div>
-            {assigned.length>0 ? (
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {assigned.slice(0,6).map(a => (
-                  <span key={a.id} className="flex items-center gap-1">
-                    <span className="avatar" style={{background:colorFor(String(a.id))}}>{(a.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
-                    <span className="text-xs text-slate-700">{a.name}{a?.type ? ' ('+a.type+')' : ''}</span>
-                  </span>
-                ))}
-                {assigned.length>6 && <span className="text-xs text-slate-500">+{assigned.length-6}</span>}
-              </div>
-            ) : (
-              <button className="pill hover:shadow" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>คลิกเพื่อเลือกพนักงาน</button>
-            )}
-            <div className="mt-2">
-              <button className="text-xs underline text-sky-600" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>แก้ไขพนักงาน</button>
-            </div>
-          </div>
-        );
-      }
-
-      function AssignModal({users, assignStation, setAssignStation, assignSel, setAssignSel, assignQuery, setAssignQuery, writePlan}){
-        return (
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
-            <div className="card w-[560px] max-w-[95vw] p-4 fadein">
-              <div className="text-lg font-semibold">เลือกพนักงาน — สถานี {assignStation}</div>
-              <div className="mt-2 flex items-center gap-2">
-                <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="ค้นหา..." value={assignQuery} onChange={e=>setAssignQuery(e.target.value)} />
-              </div>
-              <div className="max-h-[50vh] overflow-auto mt-3 space-y-1 pr-1">
-                {users.filter(u=> (u.name+u.id+(u.type||'')).toLowerCase().includes(assignQuery.toLowerCase())).map(u=>{
-                  const chosen = assignSel.has(u.id);
-                  return (
-                    <label key={u.id} className={`flex items-center gap-2 px-2 py-2 rounded-lg ${chosen?'bg-sky-50 border border-sky-200':'hover:bg-slate-50'}`}>
-                      <input type="checkbox" checked={chosen} onChange={()=>{
-                        setAssignSel(s=>{ const copy=new Set(s); if(copy.has(u.id)) copy.delete(u.id); else copy.add(u.id); return copy; });
-                      }} />
-                      <span className="avatar" style={{background:colorFor(String(u.id))}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
-                        <div className="text-[10px] text-slate-500">{u.id}</div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button className="btn" onClick={()=>{ setAssignStation(null); setAssignSel(new Set()); }}>ยกเลิก</button>
-                <button className="btnP" onClick={async()=>{
-                  const list = Array.from(assignSel);
-                  await writePlan(assignStation, list);
-                  setAssignStation(null); setAssignSel(new Set());
-                  pushToast('อัปเดตพนักงานสำเร็จ','ok');
-                }}>บันทึก</button>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      /* ---------- Issues Page (All Firebase) ---------- */
+      /* ---------- Issues Page (no images; Firebase only) ---------- */
       function IssuesPage(){
         const [form, setForm] = useState({ type:'Hardware', priority:'Medium', station:'', reporter:'', message:'' });
         const [issues, setIssues] = useState([]);
         const [selected, setSelected] = useState(null);
         const [filters, setFilters] = useState({q:'', status:'ทั้งหมด', type:'ทั้งหมด', prio:'ทั้งหมด'});
         const [chat, setChat] = useState([]);
-        const [logs, setLogs] = useState([]);
-        const [savingTicket, setSavingTicket] = useState(false);
+        const [chatText, setChatText] = useState('');
         const [editing, setEditing] = useState(false);
         const [editForm, setEditForm] = useState({ type:'', priority:'', station:'', reporter:'', message:'' });
+        const [savingTicket, setSavingTicket] = useState(false);
         const [savingEdit, setSavingEdit] = useState(false);
 
-        /* subscribe all issues */
         useEffect(()=>{
           const {db, dbApi} = window.fb;
           const off = dbApi.onValue(dbApi.dbRef(db,'/Issues'), snap=>{
             const v = snap.val()||{}; const list = Object.values(v);
             list.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
             setIssues(list);
-            // refresh selected object if updated
             if(selected){ const s = list.find(x=>x.id===selected.id); if(s) setSelected(s); }
           });
           return ()=>{ try{off();}catch{} };
         }, []);
 
-        /* subscribe chat + logs per selection */
         useEffect(()=>{
           const {db, dbApi} = window.fb;
-          if(!selected){ setChat([]); setLogs([]); return; }
-          const chatRef = dbApi.dbRef(db, `/IssueChats/${selected.id}`);
-          const logsRef = dbApi.dbRef(db, `/IssueLogs/${selected.id}`);
-          const offChat = dbApi.onValue(chatRef, snap=>{
+          if(!selected){ setChat([]); return; }
+          const ref = dbApi.dbRef(db, `/IssueChats/${selected.id}`);
+          const off = dbApi.onValue(ref, snap=>{
             const v=snap.val()||{}; const msgs = Object.values(v);
             msgs.sort((a,b)=> (a.ts||'').localeCompare(b.ts||'')); setChat(msgs);
           });
-          const offLogs = dbApi.onValue(logsRef, snap=>{
-            const v=snap.val()||{}; const arr = Object.values(v);
-            arr.sort((a,b)=> (a.ts||'').localeCompare(b.ts||'')); setLogs(arr);
-          });
-          return ()=>{ try{offChat();}catch{}; try{offLogs();}catch{} };
+          return ()=>{ try{off();}catch{} };
         }, [selected?.id]);
 
-        /* sync edit form when select */
         useEffect(()=>{
           if(!selected){ setEditing(false); return; }
           setEditForm({
@@ -487,9 +490,6 @@
               assignedTo: []
             };
             await fbSet('/Issues/'+id, ticket);
-            // log create
-            const logRef = fbPushRef('/IssueLogs/'+id);
-            await fbSet('/IssueLogs/'+id+'/'+logRef.key, { ts:new Date().toISOString(), action:'สร้างเคส', from:'-', to:'Open', by: form.reporter||'User' });
             setForm({ type:'Hardware', priority:'Medium', station:'', reporter:'', message:'' });
             pushToast('บันทึกเคสสำเร็จ','ok');
           }catch(e){ pushToast('สร้างเคสไม่สำเร็จ: '+(e?.message||e)); }
@@ -507,9 +507,6 @@
               reporter: editForm.reporter,
               message: editForm.message
             });
-            // log edit
-            const logRef = fbPushRef('/IssueLogs/'+selected.id);
-            await fbSet('/IssueLogs/'+selected.id+'/'+logRef.key, { ts:new Date().toISOString(), action:'แก้ไขรายละเอียด', by: editForm.reporter||'User' });
             setEditing(false);
             pushToast('บันทึกการแก้ไขแล้ว','ok');
           }catch(e){ pushToast('บันทึกการแก้ไขไม่ได้: '+(e?.message||e)); }
@@ -519,10 +516,7 @@
         async function updateStatus(newStatus){
           if(!selected) return;
           try{
-            const from = selected.status||'';
             await fbUpdate('/Issues/'+selected.id, { status:newStatus, updatedAt:new Date().toISOString() });
-            const logRef = fbPushRef('/IssueLogs/'+selected.id);
-            await fbSet('/IssueLogs/'+selected.id+'/'+logRef.key, { ts:new Date().toISOString(), action:'อัปเดตสถานะ', from, to:newStatus, by: editForm.reporter||selected.reporter||'System' });
             pushToast('อัปเดตสถานะสำเร็จ','ok');
           }catch(e){ pushToast('อัปเดตสถานะไม่ได้: '+(e?.message||e)); }
         }
@@ -533,7 +527,6 @@
           try{
             await fbRemove('/Issues/'+id);
             await fbRemove('/IssueChats/'+id);
-            await fbRemove('/IssueLogs/'+id);
             setSelected(null);
             pushToast('ลบเคสแล้ว','ok');
           }catch(e){ pushToast('ลบไม่ได้: '+(e?.message||e)); }
@@ -629,28 +622,21 @@
                           <th className="py-2 pr-3">ประเภท</th>
                           <th className="py-2 pr-3">ด่วน</th>
                           <th className="py-2 pr-3">สถานะ</th>
-                          <th className="py-2">จัดการ</th>
+                          <th className="py-2">รายละเอียด</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filtered.map(it=> (
-                          <tr key={it.id} className={`border-t ${selected?.id===it.id?'bg-sky-50':''}`}>
+                          <tr key={it.id} className={`border-t cursor-pointer ${selected?.id===it.id?'bg-sky-50':''}`} onClick={()=>setSelected(it)}>
                             <td className="py-2 pr-3 whitespace-nowrap">{new Date(it.time).toLocaleString()}</td>
                             <td className="py-2 pr-3">{it.station||'-'}</td>
                             <td className="py-2 pr-3">{it.type}</td>
                             <td className="py-2 pr-3">{it.priority}</td>
                             <td className="py-2 pr-3"><span className="badge">{it.status}</span></td>
-                            <td className="py-2">
-                              <div className="flex gap-2">
-                                <button className="btn text-xs px-2 py-1" onClick={()=>setSelected(it)}>แก้ไข</button>
-                                <button className="btn text-xs px-2 py-1" onClick={()=>deleteTicket(it.id)}>ลบ</button>
-                              </div>
-                            </td>
+                            <td className="py-2">{(it.message||'').slice(0,60)}</td>
                           </tr>
                         ))}
-                        {filtered.length===0 && (
-                          <tr><td colSpan="6" className="py-4 text-center text-slate-500">ไม่พบเคส</td></tr>
-                        )}
+                        {filtered.length===0 && <tr><td colSpan="6" className="py-4 text-center text-slate-500">ไม่พบเคส</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -719,20 +705,12 @@
                             </>
                           )}
 
-                          <div className="mt-3 border-t pt-3">
-                            <div className="font-medium mb-2">ประวัติการดำเนินการ</div>
-                            <div className="space-y-1 max-h-[22vh] overflow-auto">
-                              {logs.length ? logs.map((g,i)=>(
-                                <div key={i} className="text-sm">
-                                  <span className="text-slate-500">{new Date(g.ts).toLocaleString()}:</span> {g.action}{(g.from||g.to)?` (${g.from||'-'} → ${g.to||'-'})`:''} <span className="text-slate-500">โดย</span> {g.by||'-'}
-                                </div>
-                              )) : <div className="text-sm text-slate-500">ยังไม่มีประวัติ</div>}
-                            </div>
-                          </div>
-
                           <div className="mt-3 border-t pt-3 flex-1 flex flex-col">
                             <div className="font-medium mb-2">พูดคุยในเคส</div>
-                            <ChatBox onSend={addChatMessage} />
+                            <div className="flex items-center gap-2">
+                              <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="พิมพ์ข้อความ..." value={chatText} onChange={e=>setChatText(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ addChatMessage(chatText); setChatText(''); }}} />
+                              <button className="btnP" type="button" onClick={()=>{ addChatMessage(chatText); setChatText(''); }}>ส่ง</button>
+                            </div>
                             <div className="flex-1 overflow-auto space-y-2 mt-2">
                               {chat.map((m,i)=>(
                                 <div key={i} className={m.role==='user'?'text-right':'text-left'}>
@@ -743,11 +721,12 @@
                                   <div className="text-[10px] text-slate-500 mt-1">{new Date(m.ts).toLocaleString()}</div>
                                 </div>
                               ))}
+                              {!chat.length && <div className="text-sm text-slate-500">ยังไม่มีการสนทนา</div>}
                             </div>
                           </div>
                         </>
                       ) : (
-                        <div className="text-sm text-slate-500">เลือกเคสจากตารางทางซ้ายเพื่อดู/แก้ไขรายละเอียด</div>
+                        <div className="text-sm text-slate-500">เลือกเคสจากตารางเพื่อดู/แก้ไขรายละเอียด</div>
                       )}
                     </div>
                   </div>
@@ -758,25 +737,7 @@
         );
       }
 
-      function ChatBox({onSend}){
-        const [text,setText] = useState('');
-        return (
-          <div className="flex items-center gap-2">
-            <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="พิมพ์ข้อความ..." value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ onSend(text); setText(''); }}} />
-            <button className="btnP" type="button" onClick={()=>{ onSend(text); setText(''); }}>ส่ง</button>
-          </div>
-        );
-      }
-
       ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-    </script>
-
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(()=>{});
-        });
-      }
     </script>
   </body>
 </html>
