@@ -1,455 +1,782 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <title>SheetOps — Floor Plan + ปัญหา</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="theme-color" content="#0ea5e9" />
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js"></script>
+    <style>
+      html,body,#root{height:100%}
+      body{background:#f8fafc; color:#0f172a}
+      .card{border:1px solid rgba(148,163,184,.25);border-radius:1rem;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .tile{border:1px solid rgba(148,163,184,.35);background:#fff;border-radius:.75rem;padding:14px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;justify-content:center;min-height:80px;transition:box-shadow .15s,transform .2s;}
+      .tile:hover{box-shadow:0 2px 12px rgba(0,213,255,0.12);transform:scale(1.025) translateY(-2px)}
+      .tile.drop{outline:2px dashed #38bdf8; outline-offset:2px; background:rgba(56,189,248,.06)}
+      .tile.missing{background:linear-gradient(180deg,rgba(241,245,249,.7),rgba(255,255,255,1));}
+      .pill{display:inline-flex;align-items:center;gap:.35rem;padding:.15rem .5rem;border-radius:999px;font-size:11px;border:1px solid rgba(148,163,184,.35);background:#fff;white-space:nowrap}
+      .avatar{width:24px;height:24px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:.7rem;color:white;transition:box-shadow .2s;}
+      .floor1{--c:#0284c7;--bg:linear-gradient(90deg,rgba(14,165,233,.06),rgba(14,165,233,0))}
+      .floor2{--c:#a16207;--bg:linear-gradient(90deg,rgba(234,179,8,.09),rgba(234,179,8,0))}
+      .floor3{--c:#4f46e5;--bg:linear-gradient(90deg,rgba(99,102,241,.08),rgba(99,102,241,0))}
+      .floorTitle{color:var(--c); font-weight:800}
+      .sectionHead{padding:.5rem 1rem;border-radius:.75rem;background:var(--bg);border:1px dashed color-mix(in srgb, var(--c) 40%, transparent)}
+      .tileTitle{font-weight:700}
+      .btn{padding:.5rem 1rem;border-radius:.7rem;border:1px solid rgba(148,163,184,.35);background:white;transition:all .2s cubic-bezier(.4,0,.2,1);min-width:120px}
+      .btn:hover{background:#f0f9ff; transform:scale(1.04);}
+      .btn:disabled{opacity:.55; cursor:not-allowed; transform:none}
+      .btnP{background:linear-gradient(90deg,#0ea5e9 60%,#818cf8 100%);border-color:#0ea5e9;color:white;box-shadow:0 2px 8px 0 rgba(14,165,233,0.07);}
+      .btnP:hover{background:linear-gradient(90deg,#0284c7 60%,#6366f1 100%); border-color:#0284c7}
+      .select{appearance:none;background:#fff url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2220%22 viewBox=%220 0 20 20%22 fill=%22none%22><path d=%22M6 8l4 4 4-4%22 stroke=%22%23343a40%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>') no-repeat right .75rem center/1.3em 1.3em;border-radius:.5rem}
+      .fadein {animation: fadein 0.4s;}
+      @keyframes fadein {from {opacity: 0; transform: scale(0.98);} to {opacity: 1; transform: scale(1);} }
+      #toasts>div { transition: opacity .4s, transform .6s; }
+      .card { transition: box-shadow 0.3s, transform 0.2s;}
+      .card:hover { box-shadow: 0 4px 24px rgba(59,130,246,0.12),0 2px 4px rgba(0,0,0,0.04); transform:scale(1.01);} 
+      .badge{font-size:11px;border:1px solid rgba(148,163,184,.45);padding:.15rem .5rem;border-radius:9999px}
+    </style>
+  </head>
+  <body class="bg-gradient-to-br from-sky-100 via-teal-50 to-indigo-100 min-h-screen">
+    <div id="root"></div>
+    <div id="toasts" class="fixed top-3 right-3 space-y-2 z-[9999]"></div>
 
-/************ SheetOps — Combined Apps Script (Full) ************
- * Includes:
- * - CRUD: sheets + rows + values
- * - Plan: set_assignees + bulk_set_assignees
- * - Users: append_user (upsert), delete_user
- * - Issues: create (multipart + base64), list
- * - KPI: create_kpi, list_kpi
- * - AI: ai_chat (via OpenAI; set OPENAI_API_KEY in Script Properties)
- ***************************************************************/
+    <!-- Firebase init -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+      import { getDatabase, ref as dbRef, get, set, update, remove, child, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+      import { getStorage } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
+      const firebaseConfig = {
+        apiKey: "AIzaSyC6Qnfm0xiOsN_FZksKgGi_0i5wovGZ97E",
+        authDomain: "inventory-21fd3.firebaseapp.com",
+        databaseURL: "https://inventory-21fd3-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "inventory-21fd3",
+        storageBucket: "inventory-21fd3.appspot.com",
+        messagingSenderId: "27307205860",
+        appId: "1:27307205860:web:8d5da549bc1a1a519238f1"
+      };
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      const storage = getStorage(app);
+      window.fb = { app, db, storage, dbApi:{ dbRef, get, set, update, remove, child, push, onValue } };
+    </script>
 
-/************ CONFIG ************/
-const SHEET_ID   = '15nn-5GiBB8P8-OdUyLLUWrtVIbfFaljfwBBEJKs7hrU';
-const SHEET_USER = 'User';
-const SHEET_PLAN = 'Plan';
-const SHEET_ISS  = 'ปัญหา';
-const SHEET_KPI  = 'KPI';
-const UPLOAD_FOLDER_NAME = 'SheetOps_Issues_Uploads';
+    <script type="text/babel">
+      const {useState, useEffect, useMemo} = React;
 
-/************ UTIL ************/
-function _ss() { return SpreadsheetApp.openById(SHEET_ID); }
-function _sh(name) { return _ss().getSheetByName(name) || _ss().insertSheet(name); }
-function _headers(sh){
-  if (!sh.getLastColumn()) return [];
-  const h = sh.getRange(1,1,1,Math.max(1, sh.getLastColumn())).getValues()[0];
-  return h.map(x => String(x||'').trim());
-}
-function _colIndex(headers, names, fallback){
-  if (!headers || !headers.length) return fallback || 1;
-  const lower = headers.map(h => String(h).toLowerCase());
-  for (var i=0;i<names.length;i++){
-    var ix = lower.indexOf(String(names[i]).toLowerCase());
-    if (ix>-1) return ix+1; // 1-based
-  }
-  return fallback || 1;
-}
-function _nowStr(){
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-}
-function _ensureUploadFolder(){
-  const iter = DriveApp.getFoldersByName(UPLOAD_FOLDER_NAME);
-  if (iter.hasNext()) return iter.next();
-  return DriveApp.createFolder(UPLOAD_FOLDER_NAME);
-}
-function _json(obj){
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+      /* ---------- Toast ---------- */
+      function pushToast(msg, type='error'){
+        try{
+          const wrap = document.getElementById('toasts'); if(!wrap) return;
+          const node = document.createElement('div');
+          node.className = `fadein px-3 py-2 rounded-xl text-sm shadow border ${type==='error'?'bg-rose-50 border-rose-200 text-rose-800':'bg-emerald-50 border-emerald-200 text-emerald-800'}`;
+          node.textContent = msg; wrap.appendChild(node);
+          setTimeout(()=>{ node.style.opacity='0'; node.style.transform='translateY(-6px)'; }, 3200);
+          setTimeout(()=>{ try{wrap.removeChild(node)}catch{} }, 3600);
+        }catch{}
+      }
+      window.addEventListener('error', e=>pushToast('Uncaught: ' + (e?.message||'Unknown error')));
+      window.addEventListener('unhandledrejection', e=>pushToast('Async: ' + (e?.reason?.message||e?.reason||'Promise error')));
 
-/************ ENTRY ************/
-function doGet(e) {
-  try { return handle((e && e.parameter) || {}); }
-  catch (err) { return _json({ok:false, error:String(err)}); }
-}
-function doPost(e) {
-  try {
-    if (e.postData && e.postData.type === 'application/json') {
-      return handle(JSON.parse(e.postData.contents||'{}'));
-    }
-    if (e.postData && e.postData.type === 'application/x-www-form-urlencoded') {
-      const p = e.parameter || {};
-      const data = p.payload ? JSON.parse(p.payload) : p;
-      return handle(data);
-    }
-    const p = (e && e.parameter) || {};
-    if (p.action === 'create_issue') return createIssueWithFiles_(e);
-    return _json({ok:false, error:'Unsupported content type'});
-  } catch (err) { return _json({ok:false, error:String(err)}); }
-}
+      /* ---------- Excel Export ---------- */
+      function exportUsersToExcel(users){
+        if(!users?.length) return pushToast('ไม่มีรายชื่อให้ Export');
+        const rows = users.map(u=>({ ID:u.id||'', Name:u.name||'', TYPE:u.type||'' }));
+        const ws = XLSX.utils.json_to_sheet(rows, {header:['ID','Name','TYPE']});
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Users');
+        XLSX.writeFile(wb, 'users.xlsx');
+        pushToast('Export รายชื่อสำเร็จ','ok');
+      }
 
-/************ ROUTER ************/
-function handle(p){
-  const a = String(p.action||'').trim();
-  try {
-    // CRUD - sheets
-    if (a==='list_sheets')   return api_listSheets_();
-    if (a==='create_sheet')  return api_createSheet_(p);
-    if (a==='delete_sheet')  return api_deleteSheet_(p);
-    if (a==='rename_sheet')  return api_renameSheet_(p);
+      /* ---------- Firebase Helpers ---------- */
+      const hasFb = () => !!(window.fb && window.fb.db && window.fb.dbApi);
+      const fbSet = async (path, value) => window.fb.dbApi.set(window.fb.dbApi.dbRef(window.fb.db, path), value);
+      const fbUpdate = async (path, value) => window.fb.dbApi.update(window.fb.dbApi.dbRef(window.fb.db, path), value);
+      const fbRemove = async (path) => window.fb.dbApi.remove(window.fb.dbApi.dbRef(window.fb.db, path));
+      const fbPushRef = (path) => window.fb.dbApi.push(window.fb.dbApi.dbRef(window.fb.db, path));
 
-    // CRUD - rows
-    if (a==='append_row')    return api_appendRow_(p);
-    if (a==='update_row')    return api_updateRow_(p);
-    if (a==='delete_row')    return api_deleteRow_(p);
-    if (a==='upsert_by_key') return api_upsertByKey_(p);
+      /* ---------- Constants ---------- */
+      const VIEW_ONLY = new URLSearchParams(location.search).get('mode') === 'view';
+      const STATIONS = {
+        'Floor 1': ['1101','1102','1103','1104','1105','1106','1107','1201','1203','1205'],
+        'Floor 2': ['2101','2102','2103','2104','2105','2201','2203','2205'],
+        'Floor 3': ['3101','3105','3201','3205']
+      };
+      const DEFAULT_TYPES = ['Support','Case replen','Sorter','Picker','put to slot','Build','Tote'];
+      const colorFor = key => { const colors=['#0ea5e9','#06b6d4','#14b8a6','#22c55e','#a3e635','#eab308','#f59e0b','#ef4444','#6366f1','#8b5cf6','#ec4899','#f43f5e']; let hash=0; for(let i=0;i<key.length;i++)hash=key.charCodeAt(i)+((hash<<5)-hash); return colors[Math.abs(hash)%colors.length]; };
 
-    // Values
-    if (a==='get_values')    return api_getValues_(p);
-    if (a==='set_values')    return api_setValues_(p);
+      /* ======================= APP ======================= */
+      function App(){
+        const [page,setPage] = useState('plan'); // 'plan' | 'issues'
+        const [users,setUsers] = useState([]);
+        const [tasks,setTasks] = useState([]);
+        const [loading,setLoading] = useState(false);
+        const [err,setErr] = useState(null);
+        const [search,setSearch] = useState('');
+        const [typeFilter,setTypeFilter] = useState('All');
+        const [adding,setAdding] = useState(false);
+        const [newUser,setNewUser] = useState({id:'',name:'',type:''});
+        const [savingUser,setSavingUser] = useState(false);
 
-    // Plan
-    if (a==='set_assignees')        return api_setAssignees_(p);
-    if (a==='bulk_set_assignees')   return api_bulkSetAssignees_(p);
+        const [assignStation,setAssignStation] = useState(null);
+        const [assignQuery,setAssignQuery] = useState('');
+        const [assignSel,setAssignSel] = useState(new Set());
 
-    // Users
-    if (a==='append_user')          return api_appendUser_(p);
-    if (a==='delete_user')          return api_deleteUser_(p);
-    if (a==='list_users')           return api_listUsers_(p);
+        /* realtime: users + plan */
+        useEffect(()=>{
+          if(!hasFb()){ setErr('ไม่พบ Firebase'); return; }
+          setLoading(true);
+          const {db, dbApi} = window.fb;
+          const unsubs = [];
+          unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/User'), snap => { const v=snap.val()||{}; setUsers(Object.values(v)); }));
+          unsubs.push(dbApi.onValue(dbApi.dbRef(db,'/Plan'), snap => { const v=snap.val()||{}; setTasks(Object.values(v)); }));
+          setLoading(false);
+          return ()=>{ unsubs.forEach(u=>{ try{u();}catch{} }); };
+        }, []);
 
-    // Issues
-    if (a==='create_issue_base64')  return api_createIssueBase64_(p);
-    if (a==='list_issues')          return api_listIssues_(p);
-    if (a==='update_issue_status')  return api_updateIssueStatus_(p);
+        const userMap = useMemo(()=>Object.fromEntries(users.map(u=>[String(u.id),u])),[users]);
+        const taskByStation = useMemo(()=>{ const m = new Map(); tasks.forEach(t => m.set(String(t.station), t)); return m; }, [tasks]);
 
-    // KPI
-    if (a==='create_kpi')           return api_createKPI_(p);
-    if (a==='list_kpi')             return api_listKPI_(p);
+        const sheetTypes = useMemo(()=>{
+          const raw = users.map(u=>String(u.type||'').trim()).filter(Boolean);
+          const map = new Map(); for(const t of raw){ const k=t.toLowerCase(); if(!map.has(k)) map.set(k,t); }
+          return Array.from(map.values()).sort((a,b)=>a.localeCompare(b,'th'));
+        }, [users]);
+        const filteredUsers = useMemo(()=>{ const q=search.toLowerCase(); return users.filter(u => (typeFilter==='All' || u.type===typeFilter) && (u.name+u.id).toLowerCase().includes(q)); }, [users, search, typeFilter]);
 
-    // AI
-    if (a==='ai_chat')              return api_aiChat_(p);
+        async function writePlan(station, list){
+          const payload = { id:String(station), station:String(station), assignedList:Array.from(new Set(list||[])), updatedAt: new Date().toISOString() };
+          try{ await fbSet('/Plan/'+String(station), payload); return true; } catch(e){ pushToast('บันทึกไม่สำเร็จ: '+(e?.message||e)); return false; }
+        }
 
-    return _json({ok:false, error:'Unknown action'});
-  } catch (err) { return _json({ok:false, error:String(err)}); }
-}
+        async function addUser(){
+          if(VIEW_ONLY) return alert('View-only mode');
+          const {id,name,type} = newUser;
+          if(!String(id).trim() || !String(name).trim()) return pushToast('กรุณากรอก ID และ ชื่อ-สกุล');
+          try{
+            setSavingUser(true);
+            await fbSet('/User/'+String(id).trim(), { id:String(id).trim(), name:String(name).trim(), type:String(type||'').trim() });
+            setNewUser({id:'',name:'',type:''}); setAdding(false); pushToast('เพิ่มพนักงานเรียบร้อย','ok');
+          }catch(e){ pushToast('เพิ่มพนักงานไม่สำเร็จ: '+(e?.message||e)); }
+          finally{ setSavingUser(false); }
+        }
+        function onSubmitAdd(e){ e.preventDefault(); addUser(); }
 
-/************ SHEET CRUD ************/
-function api_listSheets_(){
-  const ss = _ss();
-  const items = ss.getSheets().map(s=>s.getName());
-  return _json({ok:true, sheets: items});
-}
-function api_createSheet_(p){
-  const name = String(p.name||'').trim();
-  if (!name) throw new Error('name required');
-  const ss = _ss();
-  if (ss.getSheetByName(name)) return _json({ok:true, existed:true});
-  ss.insertSheet(name);
-  return _json({ok:true});
-}
-function api_deleteSheet_(p){
-  const name = String(p.name||'').trim();
-  if (!name) throw new Error('name required');
-  const ss = _ss();
-  const sh = ss.getSheetByName(name);
-  if (!sh) return _json({ok:false, error:'sheet not found'});
-  ss.deleteSheet(sh);
-  return _json({ok:true});
-}
-function api_renameSheet_(p){
-  const from = String(p.from||'').trim();
-  const to   = String(p.to||'').trim();
-  if (!from || !to) throw new Error('from & to required');
-  const ss = _ss();
-  const sh = ss.getSheetByName(from);
-  if (!sh) return _json({ok:false, error:'sheet not found'});
-  sh.setName(to);
-  return _json({ok:true});
-}
+        async function deleteUser(id){
+          if(VIEW_ONLY) return alert('View-only mode');
+          if(!confirm('แน่ใจว่าต้องการลบพนักงาน ID '+id+' ?')) return;
+          try{
+            await fbRemove('/User/'+String(id));
+            // remove from stations
+            const affected = tasks.filter(t=> (t.assignedList||[]).includes(id));
+            for(const t of affected){ await writePlan(t.station, (t.assignedList||[]).filter(eid=>eid!==id)); }
+            pushToast('ลบพนักงานสำเร็จ','ok');
+          }catch(e){ pushToast('ลบพนักงานไม่สำเร็จ: '+(e?.message||e)); }
+        }
 
-/************ ROW CRUD ************/
-function _ensureHeaders_(sh, obj){
-  if (Array.isArray(obj)) return; // array append doesn't need headers
-  const keys = Object.keys(obj||{});
-  if (!keys.length) return;
-  const H = _headers(sh);
-  var changed = false;
-  keys.forEach(k=>{ if (H.indexOf(k)===-1) { H.push(k); changed=true; } });
-  if (changed) sh.getRange(1,1,1,H.length).setValues([H]);
-}
-function api_appendRow_(p){
-  const sheet = String(p.sheet||'').trim();
-  if (!sheet) throw new Error('sheet required');
-  const sh = _sh(sheet);
-  const row = p.row;
-  if (row==null) throw new Error('row required');
-  if (Array.isArray(row)) { sh.appendRow(row); return _json({ok:true}); }
-  _ensureHeaders_(sh, row);
-  const H = _headers(sh); const arr = new Array(H.length).fill('');
-  Object.keys(row).forEach(k=>{ const ix = H.indexOf(k); if (ix>-1) arr[ix] = row[k]; });
-  sh.appendRow(arr);
-  return _json({ok:true});
-}
-function api_updateRow_(p){
-  const sheet = String(p.sheet||'').trim();
-  const rowIndex = parseInt(p.rowIndex,10);
-  const data = p.data;
-  if (!sheet || !rowIndex) throw new Error('sheet & rowIndex required');
-  const sh = _sh(sheet);
-  if (Array.isArray(data)){
-    sh.getRange(rowIndex,1,1,data.length).setValues([data]); 
-    return _json({ok:true});
-  }
-  _ensureHeaders_(sh, data);
-  const H = _headers(sh); const arr = sh.getRange(rowIndex,1,1,Math.max(1,sh.getLastColumn())).getValues()[0];
-  Object.keys(data).forEach(k=>{ const ix = H.indexOf(k); if(ix>-1) arr[ix] = data[k]; });
-  sh.getRange(rowIndex,1,1,Math.max(1,sh.getLastColumn())).setValues([arr]);
-  return _json({ok:true});
-}
-function api_deleteRow_(p){
-  const sheet = String(p.sheet||'').trim();
-  const rowIndex = parseInt(p.rowIndex,10);
-  if (!sheet || !rowIndex) throw new Error('sheet & rowIndex required');
-  _sh(sheet).deleteRow(rowIndex);
-  return _json({ok:true});
-}
-function api_upsertByKey_(p){
-  const sheet = String(p.sheet||'').trim();
-  const key   = String(p.key||'').trim();
-  const value = String(p.value||'').trim();
-  const data  = p.data || {};
-  if (!sheet || !key) throw new Error('sheet & key required');
-  const sh = _sh(sheet);
-  _ensureHeaders_(sh, Object.assign({[key]: value}, data));
-  const H = _headers(sh);
-  const cKey = _colIndex(H, [key], 1);
-  const last = sh.getLastRow();
-  var foundRow = 0;
-  for (var r=2; r<=last; r++){ if (String(sh.getRange(r,cKey).getValue()).trim()===value){ foundRow=r; break; } }
-  if (!foundRow){ 
-    const arr = new Array(H.length).fill(''); 
-    arr[cKey-1]=value; Object.keys(data).forEach(k=>{ const ix=H.indexOf(k); if(ix>-1) arr[ix]=data[k]; });
-    sh.appendRow(arr); 
-    return _json({ok:true, created:true});
-  }
-  const arr = sh.getRange(foundRow,1,1,H.length).getValues()[0];
-  Object.keys(data).forEach(k=>{ const ix=H.indexOf(k); if(ix>-1) arr[ix]=data[k]; });
-  sh.getRange(foundRow,1,1,H.length).setValues([arr]);
-  return _json({ok:true, updated:true, row:foundRow});
-}
+        async function clearFloor(floor){
+          if(VIEW_ONLY) return alert('View-only mode');
+          const stations = STATIONS[floor] || [];
+          for (const st of stations){ await writePlan(st, []); }
+          pushToast('ล้างคนออกจาก '+floor,'ok');
+        }
+        async function clearAll(){ await clearFloor('Floor 1'); await clearFloor('Floor 2'); await clearFloor('Floor 3'); }
 
-/************ VALUES ************/
-function api_getValues_(p){
-  const sh = _sh(p.sheet||SHEET_USER);
-  const rng = sh.getRange(p.range||'A1:Z');
-  return _json({ok:true, values: rng.getValues()});
-}
-function api_setValues_(p){
-  const sh = _sh(p.sheet||SHEET_USER);
-  const rng = sh.getRange(p.range||'A1:Z');
-  const vals = p.values;
-  if (!Array.isArray(vals)) throw new Error('values (2D array) required');
-  rng.setValues(vals);
-  return _json({ok:true});
-}
+        const TypeSelect = ({value,onChange,withAll=false}) => (
+          <select className="select w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={value} onChange={e=>onChange(e.target.value)}>
+            {withAll && <option value="All">All</option>}
+            {[...new Set([...DEFAULT_TYPES, ...sheetTypes])].map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        );
 
-/************ PLAN ************/
-function api_setAssignees_(p){
-  const taskId = String(p.taskId||'').trim();
-  var employeeIds = p.employeeIds;
-  if (!Array.isArray(employeeIds))
-    employeeIds = String(employeeIds||'').split(',').map(s=>String(s).trim()).filter(String);
-  if (!taskId) throw new Error('taskId required');
+        return (
+          <div className="min-h-screen">
+            {/* Topbar */}
+            <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm">
+              <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+                <button className="text-xl md:text-2xl font-bold hover:text-sky-600 transition-all" onClick={()=>setPage('plan')}>KKRDC PITL</button>
+                <div className="ml-6 flex items-center gap-2">
+                  <button className={`btn ${page==='plan'?'btnP text-white border-sky-500':''}`} onClick={()=>setPage('plan')}>แผนผัง</button>
+                  <button className={`btn ${page==='issues'?'btnP text-white border-sky-500':''}`} onClick={()=>setPage('issues')}>ปัญหา</button>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  {!VIEW_ONLY && page==='plan' && (
+                    <>
+                      <button onClick={()=>exportUsersToExcel(users)} className="btn bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-sm hover:scale-105">Export รายชื่อ</button>
+                      <button onClick={async()=>{ await clearAll(); }} className="btn">🧹 ล้างทั้งหมด</button>
+                      <button onClick={()=>setAdding(true)} className="btn">+ เพิ่มพนักงาน</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
 
-  const sh = _sh(SHEET_PLAN), H=_headers(sh);
-  const cTask     = _colIndex(H, ['taskid','task id','station','สแตชัน','สถานี','สเตชัน'], 1);
-  const cAssigned = _colIndex(H, ['assignedto','assigned','พนักงาน','รหัส','ผู้รับผิดชอบ'], 4);
-  const last = Math.max(2, sh.getLastRow());
-  const data = last>=2 ? sh.getRange(2,1,last-1, sh.getLastColumn()).getValues() : [];
-  for (var r=0;r<data.length;r++){
-    if (String(data[r][cTask-1]).trim() === taskId){
-      sh.getRange(r+2, cAssigned).setValue(employeeIds.join(','));
-      return _json({ok:true});
-    }
-  }
-  var row = []; row[cTask-1]=taskId; row[cAssigned-1]=employeeIds.join(',');
-  sh.appendRow(row);
-  return _json({ok:true, created:true});
-}
-// Bulk save (from UI "บันทึก (n)")
-function api_bulkSetAssignees_(p){
-  var items = Array.isArray(p.items)? p.items : [];
-  var sh = _sh(SHEET_PLAN), H=_headers(sh);
-  var cTask     = _colIndex(H, ['taskid','task id','station','สแตชัน','สถานี','สเตชัน'], 1);
-  var cAssigned = _colIndex(H, ['assignedto','assigned','พนักงาน','รหัส','ผู้รับผิดชอบ'], 4);
+            <div className="max-w-7xl mx-auto px-4 py-5">
+              {page==='plan' && <PlanPage
+                users={users} search={search} setSearch={setSearch}
+                typeFilter={typeFilter} setTypeFilter={setTypeFilter}
+                filteredUsers={filteredUsers} userMap={userMap}
+                taskByStation={taskByStation}
+                setAssignStation={setAssignStation}
+                setAssignQuery={setAssignQuery}
+                setAssignSel={setAssignSel}
+                writePlan={writePlan}
+                deleteUser={deleteUser}
+              />}
 
-  // Index: taskId -> row number
-  var idx = {}, last = Math.max(2, sh.getLastRow());
-  if (last>=2){
-    var data = sh.getRange(2,1,last-1, sh.getLastColumn()).getValues();
-    for (var r=0;r<data.length;r++){
-      var tid = String(data[r][cTask-1]||'').trim();
-      if (tid) idx[tid] = r+2;
-    }
-  }
-  items.forEach(function(it){
-    var tid = String(it.taskId||'').trim();
-    var list = Array.isArray(it.employeeIds)? it.employeeIds : [];
-    if (!tid) return;
-    var row = idx[tid];
-    if (!row){
-      var newRow = []; newRow[cTask-1]=tid; newRow[cAssigned-1]=list.join(',');
-      sh.appendRow(newRow);
-      idx[tid] = sh.getLastRow();
-    } else {
-      sh.getRange(row, cAssigned).setValue(list.join(','));
-    }
-  });
-  return _json({ok:true, updated: items.length});
-}
+              {page==='issues' && <IssuesPage users={users} />}
+            </div>
 
-/************ USERS ************/
-function api_appendUser_(p){
-  const u = p.user || {}, id=String(u.id||'').trim(), name=String(u.name||'').trim(), type=String(u.type||'').trim();
-  if(!id || !name) throw new Error('id and name required');
-  const sh = _sh(SHEET_USER);
-  if (sh.getLastRow()===0) sh.appendRow(['ID','Name','(D)','Type','(F)']);
-  const H=_headers(sh);
-  const cB=_colIndex(H,['id','รหัส'],2), cC=_colIndex(H,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล'],3), cE=_colIndex(H,['type','ประเภท','ชนิด'],5);
+            <div className="text-center text-xs text-slate-500 pb-6">{loading?'Loading…':err?`เกิดข้อผิดพลาด: ${err}`:'พร้อมใช้งาน'}</div>
 
-  // Upsert by ID
-  var last = sh.getLastRow(); var updated = false;
-  for (var r=2;r<=last;r++){
-    var cur = String(sh.getRange(r, cB).getValue()).trim();
-    if (cur === id){
-      sh.getRange(r, cC).setValue(name);
-      if (cE) sh.getRange(r, cE).setValue(type);
-      updated = true; break;
-    }
-  }
-  if (!updated){
-    var row=[]; row[cB-1]=id; row[cC-1]=name; row[cE-1]=type; sh.appendRow(row);
-  }
-  return _json({ok:true, updated});
-}
-function api_deleteUser_(p){
-  const id = String(p.employeeId||'').trim();
-  if(!id) throw new Error('employeeId required');
-  const su=_sh(SHEET_USER), Hu=_headers(su); const cB=_colIndex(Hu,['id','รหัส'],2);
-  for (var r=su.getLastRow(); r>=2; r--){
-    if (String(su.getRange(r,cB).getValue()).trim()===id) su.deleteRow(r);
-  }
-  const sp=_sh(SHEET_PLAN), Hp=_headers(sp); const cA=_colIndex(Hp,['assignedto','assigned','พนักงาน','รหัส','ผู้รับผิดชอบ'],4);
-  if (sp.getLastRow()>=2){
-    var data = sp.getRange(2,1,sp.getLastRow()-1, sp.getLastColumn()).getValues();
-    for (var i=0;i<data.length;i++){ var cur=String(data[i][cA-1]||''); if(!cur) continue;
-      var parts=cur.split(',').map(s=>s.trim()).filter(Boolean).filter(s=>s!==id);
-      if (parts.join(',')!==cur) sp.getRange(i+2,cA).setValue(parts.join(','));
-    }
-  }
-  return _json({ok:true});
-}
-function api_listUsers_(_p){
-  var sh=_sh(SHEET_USER); if (sh.getLastRow()<2) return _json({ok:true, items:[]});
-  var values=sh.getRange(2,1,sh.getLastRow()-1, sh.getLastColumn()).getValues();
-  var H=_headers(sh);
-  var cId=_colIndex(H,['id','รหัส'],2)-1;
-  var cName=_colIndex(H,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล'],3)-1;
-  var cType=_colIndex(H,['type','ประเภท','ชนิด'],5)-1;
-  var items=values.map(function(r){
-    return { id:String(r[cId]||'').trim(), name:String(r[cName]||'').trim(), type:String(r[cType]||'').trim() };
-  }).filter(function(u){ return u.id && u.name; });
-  return _json({ok:true, items:items});
-}
+            {adding && (
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
+                <div className="card w-[520px] max-w-[95vw] p-5 fadein">
+                  <div className="text-lg font-semibold">เพิ่มพนักงาน</div>
+                  <form onSubmit={onSubmitAdd}>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">ID *</div>
+                        <input required className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.id} onChange={e=>setNewUser({...newUser,id:e.target.value})}/>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">ชื่อ-นามสกุล *</div>
+                        <input required className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-xs text-slate-500 mb-1">TYPE</div>
+                        <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={newUser.type} onChange={e=>setNewUser({...newUser,type:e.target.value})}>
+                          <option value="">(ไม่ระบุ)</option>
+                          {[...new Set([...DEFAULT_TYPES, ...sheetTypes])].map(t=>(<option key={t} value={t}>{t}</option>))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center justify-end gap-2">
+                      <button type="button" className="btn" onClick={()=>setAdding(false)}>ยกเลิก</button>
+                      <button type="submit" className="btnP" disabled={savingUser}>{savingUser?'กำลังบันทึก...':'บันทึก'}</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
-/************ ISSUES ************/
-function _userNameById_(id){
-  if(!id) return '';
-  try{
-    var su=_sh(SHEET_USER), Hu=_headers(su);
-    var cB=_colIndex(Hu,['id','รหัส'],2), cC=_colIndex(Hu,['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล'],3);
-    var last=su.getLastRow();
-    for (var r=2;r<=last;r++){ if (String(su.getRange(r,cB).getValue()).trim()===id) return String(su.getRange(r,cC).getValue()).trim(); }
-  }catch(e){}
-  return '';
-}
-function _appendIssueRow_(empId, taskId, message, linksArr){
-  var sh=_sh(SHEET_ISS);
-  if (sh.getLastRow()===0) sh.appendRow(['เวลา','รหัส','พนักงาน','งานที่เกี่ยวข้อง','ข้อความ','รูป','สถานะ']);
-  var H=_headers(sh);
-  var cTime=_colIndex(H,['เวลา','time','timestamp'],1);
-  var cEmp=_colIndex(H,['รหัส','รหัสพนักงาน','employeeid','empid'],2);
-  var cName=_colIndex(H,['พนักงาน','ชื่อพนักงาน','employee name','name'],3);
-  var cTask=_colIndex(H,['งานที่เกี่ยวข้อง','task','taskid','station','สแตชัน','สถานี'],4);
-  var cMsg=_colIndex(H,['ข้อความ','message','content'],5);
-  var cImg=_colIndex(H,['รูป','images','attachments'],6);
-  var cStatus=_colIndex(H,['สถานะ','status'],7);
-  var maxC=Math.max(cTime,cEmp,cName,cTask,cMsg,cImg,cStatus);
-  var row=new Array(maxC).fill('');
-  row[cTime-1]=_nowStr();
-  row[cEmp-1]=String(empId||'');
-  row[cName-1]=_userNameById_(empId);
-  row[cTask-1]=String(taskId||'');
-  row[cMsg-1]=String(message||'');
-  row[cImg-1]=(linksArr||[]).join(',');
-  row[cStatus-1]='open';
-  sh.appendRow(row);
-}
-function api_createIssueBase64_(p){
-  var empId=String(p.employeeId||'').trim(); var taskId=String(p.taskId||'').trim(); var message=String(p.message||'').trim();
-  var files=Array.isArray(p.files)?p.files:[]; var folder=_ensureUploadFolder(); var links=[];
-  files.forEach(function(f,idx){ try{ var name=(f&&f.name)?String(f.name):('image'+(idx+1)+'.png'); var type=(f&&f.type)?String(f.type):'image/png'; var data=(f&&f.data)?String(f.data):''; if(!data) return; var blob=Utilities.newBlob(Utilities.base64Decode(data), type, name); var file=folder.createFile(blob); file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); links.push(file.getUrl()); }catch(e){} });
-  _appendIssueRow_(empId, taskId, message, links); return _json({ok:true, images:links});
-}
-function createIssueWithFiles_(e){
-  var p=e.parameter||{}; var empId=String(p.employeeId||'').trim(); var taskId=String(p.taskId||'').trim(); var message=String(p.message||'').trim();
-  var folder=_ensureUploadFolder(); var links=[];
-  if(e.files) Object.keys(e.files).forEach(function(k){ var f=e.files[k]; if(!f||!f.length) return; var blob=Utilities.newBlob(f[0].bytes,f[0].type,f[0].filename); var file=folder.createFile(blob); file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); links.push(file.getUrl()); });
-  _appendIssueRow_(empId, taskId, message, links); return _json({ok:true, images:links});
-}
-function api_listIssues_(_p){
-  var sh=_sh(SHEET_ISS); if (sh.getLastRow()<2) return _json({ok:true, items:[]});
-  var values=sh.getRange(1,1,sh.getLastRow(), sh.getLastColumn()).getValues(); var H=values.shift().map(String);
-  var ixTime=_colIndex(H,['เวลา','time','timestamp'],1)-1;
-  var ixEmp=_colIndex(H,['รหัส','รหัสพนักงาน','employeeid','empid','employee'],2)-1;
-  var ixName=_colIndex(H,['พนักงาน','ชื่อพนักงาน','employee name','name'],3)-1;
-  var ixTask=_colIndex(H,['งานที่เกี่ยวข้อง','task','taskid','station','สแตชัน','สถานี'],4)-1;
-  var ixMsg=_colIndex(H,['ข้อความ','message','content'],5)-1;
-  var ixImgs=_colIndex(H,['รูป','images','attachments'],6)-1;
-  var ixStatus=_colIndex(H,['สถานะ','status'],7)-1;
-  var items=values.map(function(r,i){
-    var empId=String(r[ixEmp]||'').trim();
-    var name = ixName>=0 ? String(r[ixName]||'').trim() : _userNameById_(empId);
-    var imgs=String(r[ixImgs]||'').split(',').map(function(s){return s.trim();}).filter(String);
-    return { rowIndex:i+2, time:r[ixTime]||'', employeeId:empId, employeeName:name, taskId:r[ixTask]||'', message:r[ixMsg]||'', images:imgs, status: r[ixStatus]||'' };
-  });
-  items.sort(function(a,b){ var sa=String(a.status||'').toLowerCase()==='open'?0:1; var sb=String(b.status||'').toLowerCase()==='open'?0:1; if(sa!==sb) return sa-sb; return String(b.time).localeCompare(String(a.time)); });
-  return _json({ok:true, items});
-}
-function api_updateIssueStatus_(p){
-  var row=parseInt(p.rowIndex,10); var status=String(p.status||'').trim();
-  if(!row || !status) throw new Error('rowIndex & status required');
-  var sh=_sh(SHEET_ISS); if (row<2 || row>sh.getLastRow()) throw new Error('row out of range');
-  var H=_headers(sh); var cStatus=_colIndex(H,['สถานะ','status'],7);
-  sh.getRange(row, cStatus).setValue(status);
-  return _json({ok:true});
-}
+            {assignStation && (
+              <AssignModal
+                users={users}
+                assignStation={assignStation}
+                setAssignStation={setAssignStation}
+                assignSel={assignSel}
+                setAssignSel={setAssignSel}
+                assignQuery={assignQuery}
+                setAssignQuery={setAssignQuery}
+                writePlan={writePlan}
+              />
+            )}
+          </div>
+        );
+      }
 
-/************ KPI ************/
-function _ensureKPIHeaders_(){
-  var sh = _sh(SHEET_KPI);
-  if (sh.getLastRow()===0){
-    sh.appendRow(['User ID','Date','UserName','KPI Target','Station','Floor','Shift','Function','Standard Hour','Productive Hour','Idle Time','Break Time','Total Hour','Total Unit','Total Tote','UPMH / TPMH','PERCENT']);
-  }
-  return sh;
-}
-function api_createKPI_(p){
-  var rec = p.record || {};
-  var sh = _ensureKPIHeaders_(), H=_headers(sh);
-  var arr = new Array(H.length).fill('');
-  H.forEach(function(h, i){ arr[i] = rec[h] !== undefined ? rec[h] : ''; });
-  sh.appendRow(arr);
-  return _json({ok:true});
-}
-function api_listKPI_(p){
-  var sh = _ensureKPIHeaders_(), H=_headers(sh);
-  var last = sh.getLastRow();
-  if (last<2) return _json({ok:true, items:[]});
-  var vals = sh.getRange(2,1,last-1, sh.getLastColumn()).getValues();
-  var items = vals.map(function(r){ var obj={}; H.forEach(function(h,i){ obj[h]=r[i]; }); return obj; });
+      /* ---------- Plan Page ---------- */
+      function PlanPage({users,search,setSearch,typeFilter,setTypeFilter,filteredUsers,userMap,taskByStation,setAssignStation,setAssignQuery,setAssignSel,writePlan,deleteUser}){
+        return (
+          <div className="grid grid-cols-12 gap-6">
+            <aside className="col-span-12 md:col-span-3">
+              <div className="card p-3 fadein">
+                <div className="flex items-center gap-2 text-slate-700 font-semibold mb-2">
+                  <span className="w-5 h-5 rounded bg-sky-500 text-white grid place-items-center text-[10px]">E</span>Employee
+                </div>
+                <input placeholder="Search by name..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
+                <div className="mt-2">
+                  <select className="select w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}>
+                    <option value="All">All</option>
+                    {[...new Set(['Support','Case replen','Sorter','Picker','put to slot','Build','Tote', ...users.map(u=>u.type).filter(Boolean)])]
+                      .map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="mt-3 max-h-[60vh] overflow-auto pr-1">
+                  {filteredUsers.map(u => (
+                    <div key={u.id} draggable onDragStart={(e)=>{e.dataTransfer.setData('text/plain', JSON.stringify(u)); e.dataTransfer.effectAllowed='move';}} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 fadein">
+                      <span className="avatar shadow" style={{background:colorFor(String(u.id))}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
+                        <div className="text-[10px] text-slate-500">{u.id}</div>
+                      </div>
+                      <button className="text-rose-600 text-xs border px-2 py-1 rounded" onClick={()=>deleteUser(u.id)}>ลบ</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </aside>
 
-  var uid = String(p.userId||'').trim(); var date = String(p.date||'').trim();
-  if (uid) items = items.filter(function(x){ return String(x['User ID']||'').trim()===uid; });
-  if (date) items = items.filter(function(x){ return String(x['Date']||'').slice(0,10)===date; });
-  return _json({ok:true, items: items});
-}
+            <section className="col-span-12 md:col-span-9">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {['Floor 1','Floor 2','Floor 3'].map(floor => (
+                  <div key={floor} className={floor==='Floor 1'?'floor1':floor==='Floor 2'?'floor2':'floor3'}>
+                    <div className="sectionHead mb-2 flex items-center justify-between">
+                      <div className="floorTitle text-lg">{floor}</div>
+                      <div className="flex items-center gap-2">
+                        <button className="btn" onClick={async()=>{ const stations = STATIONS[floor]||[]; for(const st of stations){ await writePlan(st,[]);} pushToast('ล้างคนออกจาก '+floor,'ok');}}>🧹 ล้าง</button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {(STATIONS[floor]||[]).map(st => <Tile key={st} station={st} userMap={userMap} taskByStation={taskByStation} setAssignStation={setAssignStation} setAssignQuery={setAssignQuery} setAssignSel={setAssignSel} writePlan={writePlan}/>) }
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        );
+      }
 
-/************ AI CHAT ************/
-function api_aiChat_(p){
-  var key=PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
-  if(!key) return _json({ok:false, error:'Missing OPENAI_API_KEY'});
-  var msgs=p.messages||[];
-  var body={ model:'gpt-4o-mini', messages:[{role:'system', content:'คุณเป็นผู้ช่วยงานคลัง/สแตชัน ตอบสั้น กระชับ เป็นขั้นตอน'}].concat(msgs) };
-  var resp=UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions',{ method:'post', contentType:'application/json', headers:{'Authorization':'Bearer '+key}, payload:JSON.stringify(body), muteHttpExceptions:true });
-  var txt=resp.getContentText(); try{ var j=JSON.parse(txt); var reply=j&&j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content||'...'; return _json({ok:true, reply}); }catch(e){ return _json({ok:false, error:txt}); }
-}
+      function Tile({station, userMap, taskByStation, setAssignStation, setAssignQuery, setAssignSel, writePlan}){
+        const t = taskByStation.get(station) || {station, assignedList:[]};
+        const assigned = (t.assignedList||[]).map(id => userMap[id]).filter(Boolean);
+        const missing = !assigned.length;
+        return (
+          <div className={`tile ${missing?'missing':''}`}
+            onDragOver={(e)=>{e.preventDefault(); e.currentTarget.classList.add('drop');}}
+            onDragLeave={(e)=>{e.currentTarget.classList.remove('drop');}}
+            onDrop={async(e)=>{
+              e.preventDefault(); e.currentTarget.classList.remove('drop');
+              let emp=null; try{ emp = JSON.parse(e.dataTransfer.getData('text/plain')||''); }catch{}
+              if(!emp?.id) return;
+              // remove from other stations and add to this
+              const cur = (taskByStation.get(station)?.assignedList)||[];
+              const next = [...cur, emp.id].filter((v,i,a)=>a.indexOf(v)===i);
+              await writePlan(station, next);
+              pushToast(`มอบหมาย ${emp.name} → ${station}`,'ok');
+            }}>
+            <div className="flex items-center gap-2 w-full justify-between">
+              <div className="tileTitle flex items-center gap-2">{station}</div>
+            </div>
+            {assigned.length>0 ? (
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {assigned.slice(0,6).map(a => (
+                  <span key={a.id} className="flex items-center gap-1">
+                    <span className="avatar" style={{background:colorFor(String(a.id))}}>{(a.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                    <span className="text-xs text-slate-700">{a.name}{a?.type ? ' ('+a.type+')' : ''}</span>
+                  </span>
+                ))}
+                {assigned.length>6 && <span className="text-xs text-slate-500">+{assigned.length-6}</span>}
+              </div>
+            ) : (
+              <button className="pill hover:shadow" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>คลิกเพื่อเลือกพนักงาน</button>
+            )}
+            <div className="mt-2">
+              <button className="text-xs underline text-sky-600" onClick={()=>{ setAssignStation(station); setAssignQuery(''); setAssignSel(new Set()); }}>แก้ไขพนักงาน</button>
+            </div>
+          </div>
+        );
+      }
+
+      function AssignModal({users, assignStation, setAssignStation, assignSel, setAssignSel, assignQuery, setAssignQuery, writePlan}){
+        return (
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50">
+            <div className="card w-[560px] max-w-[95vw] p-4 fadein">
+              <div className="text-lg font-semibold">เลือกพนักงาน — สถานี {assignStation}</div>
+              <div className="mt-2 flex items-center gap-2">
+                <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="ค้นหา..." value={assignQuery} onChange={e=>setAssignQuery(e.target.value)} />
+              </div>
+              <div className="max-h-[50vh] overflow-auto mt-3 space-y-1 pr-1">
+                {users.filter(u=> (u.name+u.id+(u.type||'')).toLowerCase().includes(assignQuery.toLowerCase())).map(u=>{
+                  const chosen = assignSel.has(u.id);
+                  return (
+                    <label key={u.id} className={`flex items-center gap-2 px-2 py-2 rounded-lg ${chosen?'bg-sky-50 border border-sky-200':'hover:bg-slate-50'}`}>
+                      <input type="checkbox" checked={chosen} onChange={()=>{
+                        setAssignSel(s=>{ const copy=new Set(s); if(copy.has(u.id)) copy.delete(u.id); else copy.add(u.id); return copy; });
+                      }} />
+                      <span className="avatar" style={{background:colorFor(String(u.id))}}>{(u.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{u.name}{u.type ? ' ('+u.type+')' : ''}</div>
+                        <div className="text-[10px] text-slate-500">{u.id}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button className="btn" onClick={()=>{ setAssignStation(null); setAssignSel(new Set()); }}>ยกเลิก</button>
+                <button className="btnP" onClick={async()=>{
+                  const list = Array.from(assignSel);
+                  await writePlan(assignStation, list);
+                  setAssignStation(null); setAssignSel(new Set());
+                  pushToast('อัปเดตพนักงานสำเร็จ','ok');
+                }}>บันทึก</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      /* ---------- Issues Page (All Firebase) ---------- */
+      function IssuesPage(){
+        const [form, setForm] = useState({ type:'Hardware', priority:'Medium', station:'', reporter:'', message:'' });
+        const [issues, setIssues] = useState([]);
+        const [selected, setSelected] = useState(null);
+        const [filters, setFilters] = useState({q:'', status:'ทั้งหมด', type:'ทั้งหมด', prio:'ทั้งหมด'});
+        const [chat, setChat] = useState([]);
+        const [logs, setLogs] = useState([]);
+        const [savingTicket, setSavingTicket] = useState(false);
+        const [editing, setEditing] = useState(false);
+        const [editForm, setEditForm] = useState({ type:'', priority:'', station:'', reporter:'', message:'' });
+        const [savingEdit, setSavingEdit] = useState(false);
+
+        /* subscribe all issues */
+        useEffect(()=>{
+          const {db, dbApi} = window.fb;
+          const off = dbApi.onValue(dbApi.dbRef(db,'/Issues'), snap=>{
+            const v = snap.val()||{}; const list = Object.values(v);
+            list.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
+            setIssues(list);
+            // refresh selected object if updated
+            if(selected){ const s = list.find(x=>x.id===selected.id); if(s) setSelected(s); }
+          });
+          return ()=>{ try{off();}catch{} };
+        }, []);
+
+        /* subscribe chat + logs per selection */
+        useEffect(()=>{
+          const {db, dbApi} = window.fb;
+          if(!selected){ setChat([]); setLogs([]); return; }
+          const chatRef = dbApi.dbRef(db, `/IssueChats/${selected.id}`);
+          const logsRef = dbApi.dbRef(db, `/IssueLogs/${selected.id}`);
+          const offChat = dbApi.onValue(chatRef, snap=>{
+            const v=snap.val()||{}; const msgs = Object.values(v);
+            msgs.sort((a,b)=> (a.ts||'').localeCompare(b.ts||'')); setChat(msgs);
+          });
+          const offLogs = dbApi.onValue(logsRef, snap=>{
+            const v=snap.val()||{}; const arr = Object.values(v);
+            arr.sort((a,b)=> (a.ts||'').localeCompare(b.ts||'')); setLogs(arr);
+          });
+          return ()=>{ try{offChat();}catch{}; try{offLogs();}catch{} };
+        }, [selected?.id]);
+
+        /* sync edit form when select */
+        useEffect(()=>{
+          if(!selected){ setEditing(false); return; }
+          setEditForm({
+            type: selected.type||'Hardware',
+            priority: selected.priority||'Medium',
+            station: selected.station||'',
+            reporter: selected.reporter||'',
+            message: selected.message||'',
+          });
+        }, [selected?.id]);
+
+        async function createTicket(e){
+          e.preventDefault();
+          if(!form.message.trim()) return pushToast('กรุณากรอกรายละเอียดปัญหา');
+          try{
+            setSavingTicket(true);
+            const keyRef = fbPushRef('/Issues');
+            const id = keyRef.key;
+            const ticket = {
+              id,
+              time: new Date().toISOString(),
+              type: form.type,
+              priority: form.priority,
+              station: form.station||'',
+              reporter: form.reporter||'',
+              message: form.message||'',
+              status: 'Open',
+              assignedTo: []
+            };
+            await fbSet('/Issues/'+id, ticket);
+            // log create
+            const logRef = fbPushRef('/IssueLogs/'+id);
+            await fbSet('/IssueLogs/'+id+'/'+logRef.key, { ts:new Date().toISOString(), action:'สร้างเคส', from:'-', to:'Open', by: form.reporter||'User' });
+            setForm({ type:'Hardware', priority:'Medium', station:'', reporter:'', message:'' });
+            pushToast('บันทึกเคสสำเร็จ','ok');
+          }catch(e){ pushToast('สร้างเคสไม่สำเร็จ: '+(e?.message||e)); }
+          finally { setSavingTicket(false); }
+        }
+
+        async function updateTicketFields(){
+          if(!selected) return;
+          try{
+            setSavingEdit(true);
+            await fbUpdate('/Issues/'+selected.id, {
+              type: editForm.type,
+              priority: editForm.priority,
+              station: editForm.station,
+              reporter: editForm.reporter,
+              message: editForm.message
+            });
+            // log edit
+            const logRef = fbPushRef('/IssueLogs/'+selected.id);
+            await fbSet('/IssueLogs/'+selected.id+'/'+logRef.key, { ts:new Date().toISOString(), action:'แก้ไขรายละเอียด', by: editForm.reporter||'User' });
+            setEditing(false);
+            pushToast('บันทึกการแก้ไขแล้ว','ok');
+          }catch(e){ pushToast('บันทึกการแก้ไขไม่ได้: '+(e?.message||e)); }
+          finally{ setSavingEdit(false); }
+        }
+
+        async function updateStatus(newStatus){
+          if(!selected) return;
+          try{
+            const from = selected.status||'';
+            await fbUpdate('/Issues/'+selected.id, { status:newStatus, updatedAt:new Date().toISOString() });
+            const logRef = fbPushRef('/IssueLogs/'+selected.id);
+            await fbSet('/IssueLogs/'+selected.id+'/'+logRef.key, { ts:new Date().toISOString(), action:'อัปเดตสถานะ', from, to:newStatus, by: editForm.reporter||selected.reporter||'System' });
+            pushToast('อัปเดตสถานะสำเร็จ','ok');
+          }catch(e){ pushToast('อัปเดตสถานะไม่ได้: '+(e?.message||e)); }
+        }
+
+        async function deleteTicket(id){
+          if(!id) return;
+          if(!confirm('ต้องการลบเคสนี้หรือไม่?')) return;
+          try{
+            await fbRemove('/Issues/'+id);
+            await fbRemove('/IssueChats/'+id);
+            await fbRemove('/IssueLogs/'+id);
+            setSelected(null);
+            pushToast('ลบเคสแล้ว','ok');
+          }catch(e){ pushToast('ลบไม่ได้: '+(e?.message||e)); }
+        }
+
+        async function addChatMessage(txt){
+          if(!selected) return;
+          const content = (txt||'').trim(); if(!content) return;
+          try{
+            const keyRef = fbPushRef(`/IssueChats/${selected.id}`);
+            await fbSet(`/IssueChats/${selected.id}/${keyRef.key}`, { role:'user', name: editForm.reporter||selected.reporter||'User', content, ts:new Date().toISOString() });
+          }catch(e){ pushToast('ส่งข้อความไม่ได้: '+(e?.message||e)); }
+        }
+
+        const stationOptions = useMemo(()=>Object.values(STATIONS).flat(), []);
+        const filtered = useMemo(()=>{
+          return issues.filter(it=>{
+            if(filters.status!=='ทั้งหมด' && (it.status||'')!==filters.status) return false;
+            if(filters.type!=='ทั้งหมด' && (it.type||'')!==filters.type) return false;
+            if(filters.prio!=='ทั้งหมด' && (it.priority||'')!==filters.prio) return false;
+            if(filters.q && !(`${it.station||''} ${it.message||''} ${it.reporter||''}`.toLowerCase().includes(filters.q.toLowerCase()))) return false;
+            return true;
+          });
+        }, [issues, filters]);
+
+        return (
+          <div className="grid grid-cols-12 gap-6">
+            {/* Create Ticket */}
+            <div className="col-span-12 lg:col-span-4">
+              <div className="card p-4 fadein">
+                <div className="text-lg font-semibold mb-2">ปัญหา</div>
+                <form onSubmit={createTicket} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">ประเภท</div>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.type} onChange={e=>setForm({...form,type:e.target.value})}>
+                        {['Hardware','Software','Network','Safety','อื่นๆ'].map(x=> <option key={x} value={x}>{x}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">ความเร่งด่วน</div>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}>
+                        {['Low','Medium','High','Critical'].map(x=> <option key={x} value={x}>{x}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">สถานี (ถ้ามี)</div>
+                    <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.station} onChange={e=>setForm({...form,station:e.target.value})}>
+                      <option value="">(ไม่ระบุ)</option>
+                      {stationOptions.map(s=> <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">ผู้แจ้ง</div>
+                    <input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="เช่น รหัส หรือ ชื่อ" value={form.reporter} onChange={e=>setForm({...form,reporter:e.target.value})} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">รายละเอียดปัญหา *</div>
+                    <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows="4" value={form.message} onChange={e=>setForm({...form,message:e.target.value})} required />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="submit" className="btnP" disabled={savingTicket}>{savingTicket?'กำลังบันทึก...':'บันทึก'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            {/* List + Detail */}
+            <div className="col-span-12 lg:col-span-8">
+              <div className="card p-4 fadein">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <div className="text-lg font-semibold mr-auto">ประวัติเคส</div>
+                  <input className="rounded border px-3 py-2 text-sm" placeholder="ค้นหา..." value={filters.q} onChange={e=>setFilters({...filters,q:e.target.value})} />
+                  <select className="rounded border px-2 py-2 text-sm" value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}>
+                    {['ทั้งหมด','Open','Assigned','In Progress','Resolved','Cancelled'].map(s=> <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <select className="rounded border px-2 py-2 text-sm" value={filters.type} onChange={e=>setFilters({...filters,type:e.target.value})}>
+                    {['ทั้งหมด','Hardware','Software','Network','Safety','อื่นๆ'].map(s=> <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <select className="rounded border px-2 py-2 text-sm" value={filters.prio} onChange={e=>setFilters({...filters,prio:e.target.value})}>
+                    {['ทั้งหมด','Low','Medium','High','Critical'].map(s=> <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-12 xl:col-span-7 max-h-[55vh] overflow-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="text-left text-slate-500">
+                        <tr>
+                          <th className="py-2 pr-3">เวลา</th>
+                          <th className="py-2 pr-3">สถานี</th>
+                          <th className="py-2 pr-3">ประเภท</th>
+                          <th className="py-2 pr-3">ด่วน</th>
+                          <th className="py-2 pr-3">สถานะ</th>
+                          <th className="py-2">จัดการ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map(it=> (
+                          <tr key={it.id} className={`border-t ${selected?.id===it.id?'bg-sky-50':''}`}>
+                            <td className="py-2 pr-3 whitespace-nowrap">{new Date(it.time).toLocaleString()}</td>
+                            <td className="py-2 pr-3">{it.station||'-'}</td>
+                            <td className="py-2 pr-3">{it.type}</td>
+                            <td className="py-2 pr-3">{it.priority}</td>
+                            <td className="py-2 pr-3"><span className="badge">{it.status}</span></td>
+                            <td className="py-2">
+                              <div className="flex gap-2">
+                                <button className="btn text-xs px-2 py-1" onClick={()=>setSelected(it)}>แก้ไข</button>
+                                <button className="btn text-xs px-2 py-1" onClick={()=>deleteTicket(it.id)}>ลบ</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {filtered.length===0 && (
+                          <tr><td colSpan="6" className="py-4 text-center text-slate-500">ไม่พบเคส</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="col-span-12 xl:col-span-5">
+                    <div className="border rounded-xl p-3 h-full flex flex-col min-h-[260px]">
+                      <div className="font-semibold mb-2">รายละเอียดเคส</div>
+                      {selected ? (
+                        <>
+                          {!editing ? (
+                            <>
+                              <div className="text-sm">
+                                <div className="flex flex-wrap gap-x-6 gap-y-1 mb-2">
+                                  <div><span className="text-slate-500">เวลา:</span> {new Date(selected.time).toLocaleString()}</div>
+                                  <div><span className="text-slate-500">สถานี:</span> {selected.station||'-'}</div>
+                                  <div><span className="text-slate-500">ประเภท:</span> {selected.type}</div>
+                                  <div><span className="text-slate-500">ด่วน:</span> {selected.priority}</div>
+                                  <div><span className="text-slate-500">ผู้แจ้ง:</span> {selected.reporter||'-'}</div>
+                                </div>
+                                <div className="mb-2 whitespace-pre-wrap">{selected.message}</div>
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                  <button className="btn" onClick={()=>updateStatus('Assigned')}>รับเรื่อง</button>
+                                  <button className="btn" onClick={()=>updateStatus('In Progress')}>กำลังซ่อม</button>
+                                  <button className="btn" onClick={()=>updateStatus('Resolved')}>แก้ไขแล้ว</button>
+                                  <button className="btn" onClick={()=>updateStatus('Cancelled')}>ยกเลิก</button>
+                                  <button className="btn" onClick={()=>setEditing(true)}>แก้ไขรายละเอียด</button>
+                                  <button className="btn" onClick={()=>deleteTicket(selected.id)}>ลบเคส</button>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">ประเภท</div>
+                                  <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={editForm.type} onChange={e=>setEditForm({...editForm,type:e.target.value})}>
+                                    {['Hardware','Software','Network','Safety','อื่นๆ'].map(x=> <option key={x} value={x}>{x}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">ความเร่งด่วน</div>
+                                  <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={editForm.priority} onChange={e=>setEditForm({...editForm,priority:e.target.value})}>
+                                    {['Low','Medium','High','Critical'].map(x=> <option key={x} value={x}>{x}</option>)}
+                                  </select>
+                                </div>
+                                <div className="col-span-2">
+                                  <div className="text-xs text-slate-500 mb-1">สถานี</div>
+                                  <select className="w-full rounded-lg border border-slate-300 px-3 py-2" value={editForm.station} onChange={e=>setEditForm({...editForm,station:e.target.value})}>
+                                    <option value="">(ไม่ระบุ)</option>
+                                    {Object.values(STATIONS).flat().map(s=> <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </div>
+                                <div className="col-span-2">
+                                  <div className="text-xs text-slate-500 mb-1">ผู้แจ้ง</div>
+                                  <input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={editForm.reporter} onChange={e=>setEditForm({...editForm,reporter:e.target.value})}/>
+                                </div>
+                                <div className="col-span-2">
+                                  <div className="text-xs text-slate-500 mb-1">รายละเอียด</div>
+                                  <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows="4" value={editForm.message} onChange={e=>setEditForm({...editForm,message:e.target.value})}/>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 mt-3">
+                                <button className="btn" onClick={()=>{ setEditing(false); setEditForm({type:selected.type, priority:selected.priority, station:selected.station||'', reporter:selected.reporter||'', message:selected.message||''}); }}>ยกเลิก</button>
+                                <button className="btnP" onClick={updateTicketFields} disabled={savingEdit}>{savingEdit?'กำลังบันทึก...':'บันทึกการแก้ไข'}</button>
+                              </div>
+                            </>
+                          )}
+
+                          <div className="mt-3 border-t pt-3">
+                            <div className="font-medium mb-2">ประวัติการดำเนินการ</div>
+                            <div className="space-y-1 max-h-[22vh] overflow-auto">
+                              {logs.length ? logs.map((g,i)=>(
+                                <div key={i} className="text-sm">
+                                  <span className="text-slate-500">{new Date(g.ts).toLocaleString()}:</span> {g.action}{(g.from||g.to)?` (${g.from||'-'} → ${g.to||'-'})`:''} <span className="text-slate-500">โดย</span> {g.by||'-'}
+                                </div>
+                              )) : <div className="text-sm text-slate-500">ยังไม่มีประวัติ</div>}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 border-t pt-3 flex-1 flex flex-col">
+                            <div className="font-medium mb-2">พูดคุยในเคส</div>
+                            <ChatBox onSend={addChatMessage} />
+                            <div className="flex-1 overflow-auto space-y-2 mt-2">
+                              {chat.map((m,i)=>(
+                                <div key={i} className={m.role==='user'?'text-right':'text-left'}>
+                                  <div className={`inline-block px-3 py-2 rounded-lg ${m.role==='user'?'bg-sky-100':'bg-slate-100'}`}>
+                                    <div className="text-xs text-slate-500">{m.name||m.role}</div>
+                                    <div>{m.content}</div>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 mt-1">{new Date(m.ts).toLocaleString()}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-slate-500">เลือกเคสจากตารางทางซ้ายเพื่อดู/แก้ไขรายละเอียด</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      function ChatBox({onSend}){
+        const [text,setText] = useState('');
+        return (
+          <div className="flex items-center gap-2">
+            <input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="พิมพ์ข้อความ..." value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ onSend(text); setText(''); }}} />
+            <button className="btnP" type="button" onClick={()=>{ onSend(text); setText(''); }}>ส่ง</button>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    </script>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(()=>{});
+        });
+      }
+    </script>
+  </body>
+</html>
